@@ -147,7 +147,7 @@ func TestG1SerializeCompressed(t *testing.T) {
 	// thus, adding points together should equal identity element
 	ret2Neg := g2.SerializeCompressed()
 	v2 := ret2Neg[0]
-	ret2Neg[0] = ((v2 & yOddFlag) ^ yOddFlag) | g1CompFlag
+	ret2Neg[0] = ((v2 & g1YOddFlag) ^ g1YOddFlag) | g1CompFlag
 	g2Neg := &G1{}
 	err := g2Neg.Deserialize(ret2Neg)
 	if err != nil {
@@ -164,7 +164,7 @@ func TestG1SerializeCompressed(t *testing.T) {
 	ret3True := g3.Marshal()
 	ret3 := g3.SerializeCompressed()
 	// Ensure format flag is correct
-	if ret3[0] != g1CompFlag|yOddFlag {
+	if ret3[0] != g1CompFlag|g1YOddFlag {
 		t.Fatal("Invalid byte format (3)")
 	}
 	// Ensure length is correct
@@ -188,7 +188,7 @@ func TestG1SerializeCompressed(t *testing.T) {
 	// thus, adding points together should equal identity element
 	ret3Neg := g3.SerializeCompressed()
 	v3 := ret3Neg[0]
-	ret3Neg[0] = ((v3 & yOddFlag) ^ yOddFlag) | g1CompFlag
+	ret3Neg[0] = ((v3 & g1YOddFlag) ^ g1YOddFlag) | g1CompFlag
 	g3Neg := &G1{}
 	err = g3Neg.Deserialize(ret3Neg)
 	if err != nil {
@@ -244,7 +244,7 @@ func TestG1Deserialize(t *testing.T) {
 	}
 
 	g5 := &G1{}
-	m5 := []byte{g1CompFlag | yOddFlag}
+	m5 := []byte{g1CompFlag | g1YOddFlag}
 	err5 := g5.Deserialize(m5)
 	// Should raise error due to incorrect slice length
 	if err5 == nil {
@@ -273,7 +273,7 @@ func TestG1Deserialize(t *testing.T) {
 	// Invalid data for compressed identity element: yOddFlag set
 	g8 := &G1{}
 	m8 := make([]byte, 1+numBytes, 1+numBytes)
-	m8[0] = g1CompFlag | yOddFlag
+	m8[0] = g1CompFlag | g1YOddFlag
 	err8 := g8.Deserialize(m8)
 	if err8 == nil {
 		t.Fatal("Should have raised error (8)")
@@ -312,14 +312,14 @@ func TestG1Deserialize(t *testing.T) {
 func TestComputeYValue(t *testing.T) {
 	x := newGFp(1)
 	yIsOdd := false
-	y := computeYValue(x, yIsOdd)
+	y := computeG1YValue(x, yIsOdd)
 	yTrue := newGFp(2)
 	if !y.IsEqual(yTrue) {
 		t.Fatal("Should be equal (1)")
 	}
 
 	yIsOdd = true
-	y = computeYValue(x, yIsOdd)
+	y = computeG1YValue(x, yIsOdd)
 	gfpNeg(yTrue, newGFp(2))
 	if !y.IsEqual(yTrue) {
 		t.Fatal("Should be equal (2)")

@@ -4,8 +4,8 @@ import "errors"
 
 const (
 	g1UncompFlag byte = 0x10
-	g1CompFlag   byte = 0x08 // y_bit + x coord
-	yOddFlag     byte = 0x01
+	g1CompFlag   byte = 0x08
+	g1YOddFlag   byte = 0x01
 )
 
 // SerializeCompressed returns the compressed serialization of the G1 point
@@ -13,7 +13,7 @@ func (e *G1) SerializeCompressed() []byte {
 	ret := make([]byte, 0, 1+numBytes)
 	slice := e.Marshal()
 	xBytes := slice[:numBytes]
-	yByteIsOdd := slice[2*numBytes-1] & yOddFlag
+	yByteIsOdd := slice[2*numBytes-1] & g1YOddFlag
 	bitFlag := g1CompFlag
 	bitFlag |= yByteIsOdd
 	ret = append(ret, bitFlag)
@@ -39,8 +39,8 @@ func (e *G1) Deserialize(m []byte) error {
 		return errors.New("Invalid byte slice")
 	}
 	format := m[0]
-	yIsOdd := (format & yOddFlag) == yOddFlag
-	format &= ^yOddFlag
+	yIsOdd := (format & g1YOddFlag) == g1YOddFlag
+	format &= ^g1YOddFlag
 	data := m[1:]
 
 	switch format {
@@ -79,7 +79,7 @@ func (e *G1) Deserialize(m []byte) error {
 		}
 
 		// We now need to compute correct y value
-		t := computeYValue(&e.p.x, yIsOdd)
+		t := computeG1YValue(&e.p.x, yIsOdd)
 		e.p.y.Set(t)
 		e.p.z = *newGFp(1)
 		e.p.t = *newGFp(1)
@@ -93,10 +93,10 @@ func (e *G1) Deserialize(m []byte) error {
 	}
 }
 
-// computeYValue computes the correct y value;
+// computeG1YValue computes the correct y value;
 // that is, if x is a valid coordinate, then compute y such that
 // (x, y) is on the curve and y is odd or even as desired.
-func computeYValue(x *gfP, yIsOdd bool) *gfP {
+func computeG1YValue(x *gfP, yIsOdd bool) *gfP {
 	t := &gfP{}
 	// Compute t == x^3 + b
 	gfpMul(t, x, x)
