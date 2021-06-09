@@ -30,15 +30,15 @@ const (
 
 type storage struct {
 	sync.RWMutex
-	MaxBytes                       uint32 // Done
-	MaxProposalSize                uint32 // Done
-	SrvrMsgTimeout                 time.Duration
-	MsgTimeout                     time.Duration
+	MaxBytes                       uint32        // Done
+	MaxProposalSize                uint32        // Done
 	ProposalStepTimeout            time.Duration // Done
 	PreVoteStepTimeout             time.Duration // Done
 	PreCommitStepTimout            time.Duration // Done
 	DeadBlockRoundNextRoundTimeout time.Duration // Done
 	DownloadTimeout                time.Duration
+	SrvrMsgTimeout                 time.Duration
+	MsgTimeout                     time.Duration
 }
 
 var d storage
