@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/MadBase/MadNet/constants"
+	"github.com/MadBase/MadNet/dynamics"
 
 	"github.com/MadBase/MadNet/consensus/db"
 	"github.com/MadBase/MadNet/interfaces"
@@ -88,7 +89,7 @@ func (rb *Handler) HandleP2PGetBlockHeaders(ctx context.Context, r *pb.GetBlockH
 			if err != nil {
 				return err
 			}
-			if len(hdrbytes)+byteCount < constants.MaxBytes {
+			if len(hdrbytes)+byteCount < int(dynamics.GetMaxBytes(uint32(blknum))) {
 				byteCount = byteCount + len(hdrbytes)
 				hdrs = append(hdrs, hdrbytes)
 			} else {

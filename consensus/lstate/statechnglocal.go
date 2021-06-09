@@ -431,7 +431,7 @@ func (ce *Engine) doPendingNext(txn *badger.Txn, rs *RoundStates) error {
 	// cast a next round
 	if rcert.RClaims.Round != constants.DEADBLOCKROUND {
 		if rcert.RClaims.Round == constants.DEADBLOCKROUNDNR {
-			if rs.OwnValidatingState.DBRNRExpired() {
+			if rs.OwnValidatingState.DBRNRExpired(rcert.RClaims.Height) {
 				// Wait a long time before moving into Dead Block Round
 				if len(pcl)+len(pcnl) >= rs.GetCurrentThreshold() {
 					if err := ce.castNextRound(txn, rs); err != nil {

@@ -8,6 +8,7 @@ import (
 	mdefs "github.com/MadBase/MadNet/consensus/objs/capn"
 	"github.com/MadBase/MadNet/consensus/objs/ovstate"
 	"github.com/MadBase/MadNet/constants"
+	"github.com/MadBase/MadNet/dynamics"
 	gUtils "github.com/MadBase/MadNet/utils"
 	capnp "zombiezen.com/go/capnproto2"
 )
@@ -131,24 +132,28 @@ func (b *OwnValidatingState) MarshalCapn(seg *capnp.Segment) (mdefs.OwnValidatin
 	return bh, nil
 }
 
-func (b *OwnValidatingState) PTOExpired() bool {
+func (b *OwnValidatingState) PTOExpired(height uint32) bool {
 	rs := b.RoundStarted
-	return rs+int64(constants.ProposalStepTO)/constants.OneBillion < time.Now().Unix()
+	proposalStepTO := dynamics.GetProposalStepTimeout(height)
+	return rs+int64(proposalStepTO)/constants.OneBillion < time.Now().Unix()
 }
 
-func (b *OwnValidatingState) PVTOExpired() bool {
+func (b *OwnValidatingState) PVTOExpired(height uint32) bool {
 	rs := b.PreVoteStepStarted
-	return rs+int64(constants.PreVoteStepTO)/constants.OneBillion < time.Now().Unix()
+	prevoteStepTO := dynamics.GetPreVoteStepTimeout(height)
+	return rs+int64(prevoteStepTO)/constants.OneBillion < time.Now().Unix()
 }
 
-func (b *OwnValidatingState) PCTOExpired() bool {
+func (b *OwnValidatingState) PCTOExpired(height uint32) bool {
 	rs := b.PreCommitStepStarted
-	return rs+int64(constants.PreCommitStepTO)/constants.OneBillion < time.Now().Unix()
+	precommitStepTO := dynamics.GetPreCommitStepTimeout(height)
+	return rs+int64(precommitStepTO)/constants.OneBillion < time.Now().Unix()
 }
 
-func (b *OwnValidatingState) DBRNRExpired() bool {
+func (b *OwnValidatingState) DBRNRExpired(height uint32) bool {
 	rs := b.PreCommitStepStarted
-	return rs+int64(constants.DBRNRTO)/constants.OneBillion < time.Now().Unix()
+	dbrnrTO := dynamics.GetDeadBlockRoundNextRoundTimeout(height)
+	return rs+int64(dbrnrTO)/constants.OneBillion < time.Now().Unix()
 }
 
 func (b *OwnValidatingState) SetRoundStarted() {

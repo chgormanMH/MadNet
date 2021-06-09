@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/MadBase/MadNet/dynamics"
 	"github.com/MadBase/MadNet/errorz"
 	"github.com/MadBase/MadNet/utils"
 
@@ -37,7 +38,7 @@ func (tm *txHandler) GetTxsForGossip(txnState *badger.Txn, currentHeight uint32)
 	ctx := context.Background()
 	subCtx, cf := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cf()
-	return tm.pTxHdlr.GetTxsForGossip(txnState, subCtx, currentHeight, constants.MaxBytes)
+	return tm.pTxHdlr.GetTxsForGossip(txnState, subCtx, currentHeight, dynamics.GetMaxBytes(currentHeight))
 }
 
 func (tm *txHandler) IsValid(txn *badger.Txn, tx []*objs.Tx, currentHeight uint32) (objs.Vout, error) {
