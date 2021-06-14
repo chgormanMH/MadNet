@@ -16,16 +16,16 @@ type Database struct {
 	logger *logrus.Logger
 }
 
-// GetCurrentStorageInstance returns the current StorageInstance
+// GetCurrentStorageInstance returns the current RawStorage
 // from the database
-func (db *Database) GetCurrentStorageInstance() (*StorageInstance, error) {
+func (db *Database) GetCurrentStorageInstance() (*RawStorage, error) {
 	// Look up currentEpoch
 	currentEpoch, err := db.GetCurrentEpoch()
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return nil, err
 	}
-	// Look up corresponding StorageInstance
+	// Look up corresponding RawStorage
 	si, err := db.GetStorageInstance(currentEpoch)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
@@ -50,8 +50,8 @@ func (db *Database) makeStorageInstanceKey(epoch uint32) ([]byte, error) {
 	return key, nil
 }
 
-// GetStorageInstance returns the StorageInstance for epoch from the database
-func (db *Database) GetStorageInstance(epoch uint32) (*StorageInstance, error) {
+// GetStorageInstance returns the RawStorage for epoch from the database
+func (db *Database) GetStorageInstance(epoch uint32) (*RawStorage, error) {
 	key, err := db.makeStorageInstanceKey(epoch)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
@@ -62,7 +62,7 @@ func (db *Database) GetStorageInstance(epoch uint32) (*StorageInstance, error) {
 		utils.DebugTrace(db.logger, err)
 		return nil, err
 	}
-	si := &StorageInstance{}
+	si := &RawStorage{}
 	err = si.Unmarshal(v)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
@@ -70,11 +70,11 @@ func (db *Database) GetStorageInstance(epoch uint32) (*StorageInstance, error) {
 	}
 	return si, nil
 	// Look up currentEpoch
-	// Look up corresponding StorageInstance
+	// Look up corresponding RawStorage
 }
 
-// SetStorageInstance sets the StorageInstance for epoch in the database
-func (db *Database) SetStorageInstance(epoch uint32, si *StorageInstance) error {
+// SetStorageInstance sets the RawStorage for epoch in the database
+func (db *Database) SetStorageInstance(epoch uint32, si *RawStorage) error {
 	key, err := db.makeStorageInstanceKey(epoch)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
@@ -91,7 +91,7 @@ func (db *Database) SetStorageInstance(epoch uint32, si *StorageInstance) error 
 		return err
 	}
 	return nil
-	// Store StorageInstance at correct location
+	// Store RawStorage at correct location
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -162,7 +162,7 @@ func (db *Database) makeHighestEpochKey() ([]byte, error) {
 }
 
 // GetHighestEpoch returns the highest epoch from the database
-// which has a non-nil StorageInstance value
+// which has a non-nil RawStorage value
 func (db *Database) GetHighestEpoch() (uint32, error) {
 	key, err := db.makeHighestEpochKey()
 	if err != nil {
@@ -183,7 +183,7 @@ func (db *Database) GetHighestEpoch() (uint32, error) {
 }
 
 // SetHighestEpoch sets the highest epoch in the database
-// which has a non-nil StorageInstance value
+// which has a non-nil RawStorage value
 func (db *Database) SetHighestEpoch(epoch uint32) error {
 	if epoch == 0 {
 		return ErrZeroEpoch

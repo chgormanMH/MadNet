@@ -1,8 +1,6 @@
 package dynamics
 
 import (
-	"encoding/json"
-	"math/big"
 	"sync"
 	"time"
 )
@@ -47,7 +45,7 @@ type Storage struct {
 	database     *Database
 	startChan    chan struct{}
 	startOnce    sync.Once
-	rawStorage   *StorageInstance // change this out entirely on epoch boundaries
+	rawStorage   *RawStorage // change this out entirely on epoch boundaries
 	currentEpoch uint32
 }
 
@@ -77,23 +75,23 @@ func (s *Storage) Init(database *Database) error {
 		s.currentEpoch = currentEpoch
 	}
 
-	s.rawStorage = &StorageInstance{}
-	si, err := s.database.GetCurrentStorageInstance()
+	s.rawStorage = &RawStorage{}
+	rs, err := s.database.GetCurrentStorageInstance()
 	if err != nil {
 		return err
 	}
 	// ^^^ TODO:
 	//	   Should this take in epoch as argument?
 	//	   If so, how would be know what the current epoch actually is?
-	if si == nil {
-		// No StorageInstance present; set standard parameters
+	if rs == nil {
+		// No RawStorage present; set standard parameters
 		s.rawStorage.standardParameters()
 		err := s.database.SetStorageInstance(currentEpoch, s.rawStorage)
 		if err != nil {
 			return err
 		}
 	} else {
-		s.rawStorage.Overwrite(si)
+		s.rawStorage.Overwrite(rs)
 	}
 	return nil
 }
@@ -111,7 +109,7 @@ func (s *Storage) CheckForUpdates() error {
 	return nil
 }
 
-// UpdateStorageInstance updates StorageInstance to the correct value
+// UpdateStorageInstance updates RawStorage to the correct value
 // defined by the epoch.
 //
 // This is not yet implemented and will probably be involved.
@@ -123,19 +121,19 @@ func (s *Storage) UpdateStorageInstance(epoch uint32) error {
 	//		if some exist, perform those updates.
 	s.CheckForUpdates()
 
-	// Search for StorageInstance for epoch at correct location.
-	si, err := s.database.GetStorageInstance(epoch)
+	// Search for RawStorage for epoch at correct location.
+	rs, err := s.database.GetStorageInstance(epoch)
 	if err != nil {
 		return err
 	}
-	if si == nil {
+	if rs == nil {
 		// Not present; continue using current one and store it
-		err := s.database.SetStorageInstance(epoch, si)
+		err := s.database.SetStorageInstance(epoch, rs)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := s.rawStorage.Overwrite(si)
+		err := s.rawStorage.Overwrite(rs)
 		if err != nil {
 			return err
 		}
@@ -370,204 +368,6 @@ func (s *Storage) SetDownloadTimeout(value time.Duration, epoch uint32) error {
 	s.Lock()
 	defer s.Unlock()
 	s.DownloadTimeout = value
-	return nil
-}
-*/
-
-// StorageInstance is the struct which actually
-type StorageInstance struct {
-	MaxBytes                       uint32        `json:"maxBytes,omitempty"`
-	MaxProposalSize                uint32        `json:"maxProposalSize,omitempty"`
-	ProposalStepTimeout            time.Duration `json:"proposalStepTimeout,omitempty"`
-	PreVoteStepTimeout             time.Duration `json:"preVoteStepTimeout,omitempty"`
-	PreCommitStepTimout            time.Duration `json:"preCommitStepTimeout,omitempty"`
-	DeadBlockRoundNextRoundTimeout time.Duration `json:"deadBlockRoundNextRoundTimeout,omitempty"`
-	DownloadTimeout                time.Duration `json:"downloadTimeout,omitempty"`
-	SrvrMsgTimeout                 time.Duration `json:"srvrMsgTimeout,omitempty"`
-	MsgTimeout                     time.Duration `json:"msgTimeout,omitempty"`
-
-	MinTxBurnedFee *big.Int `json:"minTxBurnedFee,omitempty"`
-	TxValidVersion uint32   `json:"txValidVersion,omitempty"`
-
-	MinValueStoreBurnedFee   *big.Int `json:"minValueStoreBurnedFee,omitempty"` // TODO: Do we need to worry about storing variable-size values?
-	ValueStoreTxValidVersion uint32   `json:"valueStoreTxValidVersion,omitempty"`
-
-	MinAtomicSwapBurnedFee   *big.Int `json:"minAtomicSwapBurnedFee,omitempty"` // TODO: Do we need to worry about storing variable-size values?
-	AtomicSwapValidStopEpoch uint32   `json:"atomicSwapValidStopEpoch,omitempty"`
-
-	DataStoreTxValidVersion uint32 `json:"dataStoreTxValidVersion,omitempty"`
-}
-
-// Marshal performs json.Marshal on the StorageInstance struct.
-func (si *StorageInstance) Marshal() ([]byte, error) {
-	return json.Marshal(si)
-}
-
-// Unmarshal performs json.Unmarshal on the StorageInstance struct.
-func (si *StorageInstance) Unmarshal(v []byte) error {
-	if si == nil {
-		return ErrStorageInstanceNilPointer
-	}
-	return json.Unmarshal(v, si)
-}
-
-// Copy makes a complete copy of StorageInstance struct.
-func (si *StorageInstance) Copy() (*StorageInstance, error) {
-	siBytes, err := si.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	c := &StorageInstance{}
-	err = c.Unmarshal(siBytes)
-	if err != nil {
-		return nil, err
-	}
-	return c, nil
-}
-
-// Overwrite replaces the current StorageGetInterface contents with the copy
-// taken as an argument
-func (si *StorageInstance) Overwrite(c *StorageInstance) error {
-	cBytes, err := c.Marshal()
-	if err != nil {
-		return err
-	}
-	err = si.Unmarshal(cBytes)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// standardParameters initializes StorageInstance with the standard (original)
-// parameters for the system.
-func (si *StorageInstance) standardParameters() {
-	si.MaxBytes = maxBytes
-	si.MaxProposalSize = maxProposalSize
-	si.ProposalStepTimeout = proposalStepTO
-	si.PreVoteStepTimeout = preVoteStepTO
-	si.PreCommitStepTimout = preCommitStepTO
-	si.DeadBlockRoundNextRoundTimeout = dBRNRTO
-	si.DownloadTimeout = downloadTO
-	si.SrvrMsgTimeout = srvrMsgTimeout
-	si.MsgTimeout = msgTimeout
-}
-
-// GetMaxBytes returns the maximum allowed bytes
-func (si *StorageInstance) GetMaxBytes() uint32 {
-	return si.MaxBytes
-}
-
-/*
-// SetMaxBytes sets the maximum allowed bytes
-func (d *StorageInstance) SetMaxBytes(value uint32, epoch uint32) error {
-	d.MaxBytes = value
-	return nil
-}
-*/
-
-// GetMaxProposalSize returns the maximum size of bytes allowed in a proposal
-func (si *StorageInstance) GetMaxProposalSize() uint32 {
-	return si.MaxProposalSize
-}
-
-/*
-// SetMaxProposalSize sets the maximum size of bytes allowed in a proposal
-func (d *StorageInstance) SetMaxProposalSize(value uint32, epoch uint32) error {
-	d.MaxProposalSize = value
-	return nil
-}
-*/
-
-// GetSrvrMsgTimeout returns the time before timeout of server message
-func (si *StorageInstance) GetSrvrMsgTimeout() time.Duration {
-	return si.SrvrMsgTimeout
-}
-
-/*
-// SetSrvrMsgTimeout sets the time before timeout of server message
-func (d *StorageInstance) SetSrvrMsgTimeout(value time.Duration, epoch uint32) error {
-	d.SrvrMsgTimeout = value
-	return nil
-}
-*/
-
-// GetMsgTimeout returns the timeout to receive a message
-func (si *StorageInstance) GetMsgTimeout() time.Duration {
-	return si.MsgTimeout
-}
-
-/*
-// SetMsgTimeout sets the timeout to receive a message
-func (d *StorageInstance) SetMsgTimeout(value time.Duration, epoch uint32) error {
-	d.MsgTimeout = value
-	return nil
-}
-*/
-
-// GetProposalStepTimeout returns the proposal step timeout
-func (si *StorageInstance) GetProposalStepTimeout() time.Duration {
-	return si.ProposalStepTimeout
-}
-
-/*
-// SetProposalStepTimeout sets the proposal step timeout
-func (d *StorageInstance) SetProposalStepTimeout(value time.Duration, epoch uint32) error {
-	d.ProposalStepTimeout = value
-	return nil
-}
-*/
-
-// GetPreVoteStepTimeout returns the prevote step timeout
-func (si *StorageInstance) GetPreVoteStepTimeout() time.Duration {
-	return si.PreVoteStepTimeout
-}
-
-/*
-// SetPreVoteStepTimeout sets the prevote step timeout
-func (d *StorageInstance) SetPreVoteStepTimeout(value time.Duration, epoch uint32) error {
-	d.PreVoteStepTimeout = value
-	return nil
-}
-*/
-
-// GetPreCommitStepTimeout returns the precommit step timeout
-func (si *StorageInstance) GetPreCommitStepTimeout() time.Duration {
-	return si.PreCommitStepTimout
-}
-
-/*
-// SetPreCommitStepTimeout sets the precommit step timeout
-func (d *StorageInstance) SetPreCommitStepTimeout(value time.Duration, epoch uint32) error {
-	d.PreCommitStepTimout = value
-	return nil
-}
-*/
-
-// GetDeadBlockRoundNextRoundTimeout returns the timeout required before
-// moving into the DeadBlockRound
-func (si *StorageInstance) GetDeadBlockRoundNextRoundTimeout() time.Duration {
-	return si.DeadBlockRoundNextRoundTimeout
-}
-
-/*
-// SetDeadBlockRoundNextRoundTimeout sets the timeout required before
-// moving into the DeadBlockRound
-func (d *StorageInstance) SetDeadBlockRoundNextRoundTimeout(value time.Duration, epoch uint32) error {
-	d.DeadBlockRoundNextRoundTimeout = value
-	return nil
-}
-*/
-
-// GetDownloadTimeout returns the timeout for downloads
-func (si *StorageInstance) GetDownloadTimeout() time.Duration {
-	return si.DownloadTimeout
-}
-
-/*
-// SetDownloadTimeout sets the timeout for downloads
-func (d *StorageInstance) SetDownloadTimeout(value time.Duration, epoch uint32) error {
-	d.DownloadTimeout = value
 	return nil
 }
 */
