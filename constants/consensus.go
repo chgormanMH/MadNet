@@ -21,3 +21,15 @@ const (
 func AdminHandlerKid() []byte {
 	return []byte("constant")
 }
+
+// StorageCurrentEpoch returns a constant byte slice to be used for storing
+// current epoch
+func StorageCurrentEpoch() []byte {
+	return []byte("CurrentEpoch")
+}
+
+// StorageHighestEpoch returns a constant byte slice to be used for storing
+// highest epoch
+func StorageHighestEpoch() []byte {
+	return []byte("HighestEpoch")
+}

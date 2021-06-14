@@ -44,11 +44,11 @@ type StorageGetInterface interface {
 // Storage is the struct which will implement the StorageGetInterface interface.
 type Storage struct {
 	sync.RWMutex
-	database         *Database
-	startChan        chan struct{}
-	startOnce        sync.Once
-	*StorageInstance // change this out entirely on epoch boundaries
-	currentEpoch     uint32
+	database     *Database
+	startChan    chan struct{}
+	startOnce    sync.Once
+	rawStorage   *StorageInstance // change this out entirely on epoch boundaries
+	currentEpoch uint32
 }
 
 // Init initializes the Storage structure.
@@ -77,7 +77,7 @@ func (s *Storage) Init(database *Database) error {
 		s.currentEpoch = currentEpoch
 	}
 
-	s.StorageInstance = &StorageInstance{}
+	s.rawStorage = &StorageInstance{}
 	si, err := s.database.GetCurrentStorageInstance()
 	if err != nil {
 		return err
@@ -87,13 +87,13 @@ func (s *Storage) Init(database *Database) error {
 	//	   If so, how would be know what the current epoch actually is?
 	if si == nil {
 		// No StorageInstance present; set standard parameters
-		s.StorageInstance.standardParameters()
-		err := s.database.SetStorageInstance(currentEpoch, s.StorageInstance)
+		s.rawStorage.standardParameters()
+		err := s.database.SetStorageInstance(currentEpoch, s.rawStorage)
 		if err != nil {
 			return err
 		}
 	} else {
-		s.StorageInstance.Overwrite(si)
+		s.rawStorage.Overwrite(si)
 	}
 	return nil
 }
@@ -135,7 +135,7 @@ func (s *Storage) UpdateStorageInstance(epoch uint32) error {
 			return err
 		}
 	} else {
-		err := s.StorageInstance.Overwrite(si)
+		err := s.rawStorage.Overwrite(si)
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func (s *Storage) GetMaxBytes() uint32 {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetMaxBytes()
+	return s.rawStorage.GetMaxBytes()
 }
 
 /*
@@ -211,7 +211,7 @@ func (s *Storage) GetMaxProposalSize() uint32 {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetMaxProposalSize()
+	return s.rawStorage.GetMaxProposalSize()
 }
 
 /*
@@ -232,7 +232,7 @@ func (s *Storage) GetSrvrMsgTimeout() time.Duration {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetSrvrMsgTimeout()
+	return s.rawStorage.GetSrvrMsgTimeout()
 }
 
 /*
@@ -253,7 +253,7 @@ func (s *Storage) GetMsgTimeout() time.Duration {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetMsgTimeout()
+	return s.rawStorage.GetMsgTimeout()
 }
 
 /*
@@ -274,7 +274,7 @@ func (s *Storage) GetProposalStepTimeout() time.Duration {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetProposalStepTimeout()
+	return s.rawStorage.GetProposalStepTimeout()
 }
 
 /*
@@ -295,7 +295,7 @@ func (s *Storage) GetPreVoteStepTimeout() time.Duration {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetPreVoteStepTimeout()
+	return s.rawStorage.GetPreVoteStepTimeout()
 }
 
 /*
@@ -316,7 +316,7 @@ func (s *Storage) GetPreCommitStepTimeout() time.Duration {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetPreCommitStepTimeout()
+	return s.rawStorage.GetPreCommitStepTimeout()
 }
 
 /*
@@ -338,7 +338,7 @@ func (s *Storage) GetDeadBlockRoundNextRoundTimeout() time.Duration {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetDeadBlockRoundNextRoundTimeout()
+	return s.rawStorage.GetDeadBlockRoundNextRoundTimeout()
 }
 
 /*
@@ -360,7 +360,7 @@ func (s *Storage) GetDownloadTimeout() time.Duration {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.StorageInstance.GetDownloadTimeout()
+	return s.rawStorage.GetDownloadTimeout()
 }
 
 /*
