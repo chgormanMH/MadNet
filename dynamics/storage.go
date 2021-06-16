@@ -3,6 +3,9 @@ package dynamics
 import (
 	"sync"
 	"time"
+
+	"github.com/MadBase/MadNet/utils"
+	"github.com/sirupsen/logrus"
 )
 
 /*
@@ -47,6 +50,7 @@ type Storage struct {
 	startOnce    sync.Once
 	rawStorage   *RawStorage // change this out entirely on epoch boundaries
 	currentEpoch uint32
+	logger       *logrus.Logger
 }
 
 // Init initializes the Storage structure.
@@ -60,6 +64,7 @@ func (s *Storage) Init(database *Database) error {
 	// Update currentEpoch and highest written to reflect this.
 	currentEpoch, err := s.database.GetCurrentEpoch()
 	if err != nil {
+		utils.DebugTrace(s.logger, err)
 		return err
 	}
 	if currentEpoch == 0 {
@@ -68,6 +73,7 @@ func (s *Storage) Init(database *Database) error {
 		currentEpoch = 1
 		err := s.database.SetCurrentEpoch(currentEpoch)
 		if err != nil {
+			utils.DebugTrace(s.logger, err)
 			return err
 		}
 		s.currentEpoch = currentEpoch
@@ -76,8 +82,9 @@ func (s *Storage) Init(database *Database) error {
 	}
 
 	s.rawStorage = &RawStorage{}
-	rs, err := s.database.GetCurrentStorageInstance()
+	rs, err := s.database.GetCurrentRawStorage()
 	if err != nil {
+		utils.DebugTrace(s.logger, err)
 		return err
 	}
 	// ^^^ TODO:
@@ -86,8 +93,9 @@ func (s *Storage) Init(database *Database) error {
 	if rs == nil {
 		// No RawStorage present; set standard parameters
 		s.rawStorage.standardParameters()
-		err := s.database.SetStorageInstance(currentEpoch, s.rawStorage)
+		err := s.database.SetRawStorage(currentEpoch, s.rawStorage)
 		if err != nil {
+			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	} else {
@@ -111,8 +119,6 @@ func (s *Storage) CheckForUpdates() error {
 
 // UpdateStorageInstance updates RawStorage to the correct value
 // defined by the epoch.
-//
-// This is not yet implemented and will probably be involved.
 func (s *Storage) UpdateStorageInstance(epoch uint32) error {
 	s.Lock()
 	defer s.Unlock()
@@ -122,19 +128,22 @@ func (s *Storage) UpdateStorageInstance(epoch uint32) error {
 	s.CheckForUpdates()
 
 	// Search for RawStorage for epoch at correct location.
-	rs, err := s.database.GetStorageInstance(epoch)
+	rs, err := s.database.GetRawStorage(epoch)
 	if err != nil {
+		utils.DebugTrace(s.logger, err)
 		return err
 	}
 	if rs == nil {
 		// Not present; continue using current one and store it
-		err := s.database.SetStorageInstance(epoch, rs)
+		err := s.database.SetRawStorage(epoch, rs)
 		if err != nil {
+			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	} else {
 		err := s.rawStorage.Overwrite(rs)
 		if err != nil {
+			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	}
@@ -212,17 +221,6 @@ func (s *Storage) GetMaxProposalSize() uint32 {
 	return s.rawStorage.GetMaxProposalSize()
 }
 
-/*
-// SetMaxProposalSize sets the maximum size of bytes allowed in a proposal
-func (s *Storage) SetMaxProposalSize(value uint32, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.MaxProposalSize = value
-	return nil
-}
-*/
-
 // GetSrvrMsgTimeout returns the time before timeout of server message
 func (s *Storage) GetSrvrMsgTimeout() time.Duration {
 	select {
@@ -232,17 +230,6 @@ func (s *Storage) GetSrvrMsgTimeout() time.Duration {
 	defer s.RUnlock()
 	return s.rawStorage.GetSrvrMsgTimeout()
 }
-
-/*
-// SetSrvrMsgTimeout sets the time before timeout of server message
-func (s *Storage) SetSrvrMsgTimeout(value time.Duration, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.SrvrMsgTimeout = value
-	return nil
-}
-*/
 
 // GetMsgTimeout returns the timeout to receive a message
 func (s *Storage) GetMsgTimeout() time.Duration {
@@ -339,18 +326,6 @@ func (s *Storage) GetDeadBlockRoundNextRoundTimeout() time.Duration {
 	return s.rawStorage.GetDeadBlockRoundNextRoundTimeout()
 }
 
-/*
-// SetDeadBlockRoundNextRoundTimeout sets the timeout required before
-// moving into the DeadBlockRound
-func (s *Storage) SetDeadBlockRoundNextRoundTimeout(value time.Duration, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.DeadBlockRoundNextRoundTimeout = value
-	return nil
-}
-*/
-
 // GetDownloadTimeout returns the timeout for downloads
 func (s *Storage) GetDownloadTimeout() time.Duration {
 	select {
@@ -360,14 +335,3 @@ func (s *Storage) GetDownloadTimeout() time.Duration {
 	defer s.RUnlock()
 	return s.rawStorage.GetDownloadTimeout()
 }
-
-/*
-// SetDownloadTimeout sets the timeout for downloads
-func (s *Storage) SetDownloadTimeout(value time.Duration, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.DownloadTimeout = value
-	return nil
-}
-*/

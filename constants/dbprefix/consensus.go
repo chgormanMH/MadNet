@@ -122,6 +122,6 @@ func PrefixStagedBlockHeaderKey() []byte {
 	return []byte("a3")
 }
 
-func PrefixStorageInstanceKey() []byte {
+func PrefixRawStorageKey() []byte {
 	return []byte("a4")
 }

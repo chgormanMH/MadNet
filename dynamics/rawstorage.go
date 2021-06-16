@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// TODO: Do we need to worry about locks here?
+
 // RawStorage is the struct which actually stores everything
 type RawStorage struct {
 	MaxBytes                       uint32        `json:"maxBytes,omitempty"`
@@ -32,6 +34,9 @@ type RawStorage struct {
 
 // Marshal performs json.Marshal on the RawStorage struct.
 func (rs *RawStorage) Marshal() ([]byte, error) {
+	if rs == nil {
+		return nil, ErrRawStorageNilPointer
+	}
 	return json.Marshal(rs)
 }
 
@@ -57,7 +62,7 @@ func (rs *RawStorage) Copy() (*RawStorage, error) {
 	return c, nil
 }
 
-// Overwrite replaces the current StorageGetInterface contents with the copy
+// Overwrite replaces the current RawStorage contents with the copy
 // taken as an argument
 func (rs *RawStorage) Overwrite(c *RawStorage) error {
 	cBytes, err := c.Marshal()
@@ -93,6 +98,7 @@ func (rs *RawStorage) GetMaxBytes() uint32 {
 // SetMaxBytes sets the maximum allowed bytes
 func (rs *RawStorage) SetMaxBytes(value uint32) {
 	rs.MaxBytes = value
+	rs.MaxProposalSize = value
 }
 
 // GetMaxProposalSize returns the maximum size of bytes allowed in a proposal
@@ -100,19 +106,9 @@ func (rs *RawStorage) GetMaxProposalSize() uint32 {
 	return rs.MaxProposalSize
 }
 
-// SetMaxProposalSize sets the maximum size of bytes allowed in a proposal
-func (rs *RawStorage) SetMaxProposalSize(value uint32) {
-	rs.MaxProposalSize = value
-}
-
 // GetSrvrMsgTimeout returns the time before timeout of server message
 func (rs *RawStorage) GetSrvrMsgTimeout() time.Duration {
 	return rs.SrvrMsgTimeout
-}
-
-// SetSrvrMsgTimeout sets the time before timeout of server message
-func (rs *RawStorage) SetSrvrMsgTimeout(value time.Duration) {
-	rs.SrvrMsgTimeout = value
 }
 
 // GetMsgTimeout returns the timeout to receive a message
@@ -121,9 +117,9 @@ func (rs *RawStorage) GetMsgTimeout() time.Duration {
 }
 
 // SetMsgTimeout sets the timeout to receive a message
-// TODO: enforce correct relationship!
 func (rs *RawStorage) SetMsgTimeout(value time.Duration) {
 	rs.MsgTimeout = value
+	rs.SrvrMsgTimeout = (3 * value) / 4
 }
 
 // GetProposalStepTimeout returns the proposal step timeout
@@ -132,9 +128,11 @@ func (rs *RawStorage) GetProposalStepTimeout() time.Duration {
 }
 
 // SetProposalStepTimeout sets the proposal step timeout
-// TODO: enforce correct relationship!
 func (rs *RawStorage) SetProposalStepTimeout(value time.Duration) {
 	rs.ProposalStepTimeout = value
+	sum := rs.ProposalStepTimeout + rs.PreVoteStepTimeout + rs.PreCommitStepTimout
+	rs.DownloadTimeout = sum
+	rs.DeadBlockRoundNextRoundTimeout = (5 * sum) / 2
 }
 
 // GetPreVoteStepTimeout returns the prevote step timeout
@@ -143,9 +141,11 @@ func (rs *RawStorage) GetPreVoteStepTimeout() time.Duration {
 }
 
 // SetPreVoteStepTimeout sets the prevote step timeout
-// TODO: enforce correct relationship!
 func (rs *RawStorage) SetPreVoteStepTimeout(value time.Duration) {
 	rs.PreVoteStepTimeout = value
+	sum := rs.ProposalStepTimeout + rs.PreVoteStepTimeout + rs.PreCommitStepTimout
+	rs.DownloadTimeout = sum
+	rs.DeadBlockRoundNextRoundTimeout = (5 * sum) / 2
 }
 
 // GetPreCommitStepTimeout returns the precommit step timeout
@@ -154,9 +154,11 @@ func (rs *RawStorage) GetPreCommitStepTimeout() time.Duration {
 }
 
 // SetPreCommitStepTimeout sets the precommit step timeout
-// TODO: enforce correct relationship!
 func (rs *RawStorage) SetPreCommitStepTimeout(value time.Duration) {
 	rs.PreCommitStepTimout = value
+	sum := rs.ProposalStepTimeout + rs.PreVoteStepTimeout + rs.PreCommitStepTimout
+	rs.DownloadTimeout = sum
+	rs.DeadBlockRoundNextRoundTimeout = (5 * sum) / 2
 }
 
 // GetDeadBlockRoundNextRoundTimeout returns the timeout required before
@@ -165,20 +167,7 @@ func (rs *RawStorage) GetDeadBlockRoundNextRoundTimeout() time.Duration {
 	return rs.DeadBlockRoundNextRoundTimeout
 }
 
-// SetDeadBlockRoundNextRoundTimeout sets the timeout required before
-// moving into the DeadBlockRound
-// TODO: enforce correct relationship!
-func (rs *RawStorage) SetDeadBlockRoundNextRoundTimeout(value time.Duration) {
-	rs.DeadBlockRoundNextRoundTimeout = value
-}
-
 // GetDownloadTimeout returns the timeout for downloads
 func (rs *RawStorage) GetDownloadTimeout() time.Duration {
 	return rs.DownloadTimeout
-}
-
-// SetDownloadTimeout sets the timeout for downloads
-// TODO: enforce correct relationship!
-func (rs *RawStorage) SetDownloadTimeout(value time.Duration) {
-	rs.DownloadTimeout = value
 }
