@@ -12,7 +12,7 @@ import (
 // Database is an abstraction for object storage
 type Database struct {
 	sync.Mutex
-	rawDB  *rawDataBase
+	rawDB  rawDataBase
 	logger *logrus.Logger
 }
 
@@ -100,27 +100,26 @@ func (db *Database) SetRawStorage(epoch uint32, rs *RawStorage) error {
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-func (db *Database) makeCurrentEpochKey() ([]byte, error) {
+func (db *Database) makeCurrentEpochKey() []byte {
 	prefix := dbprefix.PrefixRawStorageKey()
 	currentEpoch := constants.StorageCurrentEpoch()
 	key := []byte{}
 	key = append(key, prefix...)
 	key = append(key, currentEpoch...)
-	return key, nil
+	return key
 }
 
 // GetCurrentEpoch returns the current epoch from the database
 // TODO: What should happen if value is 0 or does not exist?
 func (db *Database) GetCurrentEpoch() (uint32, error) {
-	key, err := db.makeCurrentEpochKey()
-	if err != nil {
-		utils.DebugTrace(db.logger, err)
-		return 0, err
-	}
+	key := db.makeCurrentEpochKey()
 	v, err := db.rawDB.GetValue(key)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return 0, err
+	}
+	if v == nil {
+		return 0, nil
 	}
 	value, err := utils.UnmarshalUint32(v)
 	if err != nil {
@@ -135,13 +134,9 @@ func (db *Database) SetCurrentEpoch(epoch uint32) error {
 	if epoch == 0 {
 		return ErrZeroEpoch
 	}
-	key, err := db.makeCurrentEpochKey()
-	if err != nil {
-		utils.DebugTrace(db.logger, err)
-		return err
-	}
+	key := db.makeCurrentEpochKey()
 	value := utils.MarshalUint32(epoch)
-	err = db.rawDB.SetValue(key, value)
+	err := db.rawDB.SetValue(key, value)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return err
@@ -153,27 +148,26 @@ func (db *Database) SetCurrentEpoch(epoch uint32) error {
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-func (db *Database) makeHighestEpochKey() ([]byte, error) {
+func (db *Database) makeHighestEpochKey() []byte {
 	prefix := dbprefix.PrefixRawStorageKey()
 	highestEpoch := constants.StorageHighestEpoch()
 	key := []byte{}
 	key = append(key, prefix...)
 	key = append(key, highestEpoch...)
-	return key, nil
+	return key
 }
 
 // GetHighestEpoch returns the highest epoch from the database
 // which has a non-nil RawStorage value
 func (db *Database) GetHighestEpoch() (uint32, error) {
-	key, err := db.makeHighestEpochKey()
-	if err != nil {
-		utils.DebugTrace(db.logger, err)
-		return 0, err
-	}
+	key := db.makeHighestEpochKey()
 	v, err := db.rawDB.GetValue(key)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return 0, err
+	}
+	if v == nil {
+		return 0, nil
 	}
 	value, err := utils.UnmarshalUint32(v)
 	if err != nil {
@@ -189,13 +183,9 @@ func (db *Database) SetHighestEpoch(epoch uint32) error {
 	if epoch == 0 {
 		return ErrZeroEpoch
 	}
-	key, err := db.makeHighestEpochKey()
-	if err != nil {
-		utils.DebugTrace(db.logger, err)
-		return err
-	}
+	key := db.makeHighestEpochKey()
 	value := utils.MarshalUint32(epoch)
-	err = db.rawDB.SetValue(key, value)
+	err := db.rawDB.SetValue(key, value)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return err

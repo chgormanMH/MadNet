@@ -54,12 +54,15 @@ type Storage struct {
 }
 
 // Init initializes the Storage structure.
-func (s *Storage) Init(database *Database) error {
+func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 	// initialize channel
 	s.startChan = make(chan struct{})
 
 	// initialize database
 	s.database = database
+
+	// initialize logger
+	s.logger = logger
 
 	// Update currentEpoch and highest written to reflect this.
 	currentEpoch, err := s.database.GetCurrentEpoch()
