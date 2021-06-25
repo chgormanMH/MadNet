@@ -26,17 +26,17 @@ func (db *Database) GetCurrentRawStorage() (*RawStorage, error) {
 		return nil, err
 	}
 	if currentEpoch == 0 {
-		// Need to do something specific if currentEpoch == 0.
+		// TODO: Need to do something specific if currentEpoch == 0.
 		// Load standard parameters or return error?
 		panic("not implemented")
 	}
 	// Look up corresponding RawStorage
-	si, err := db.GetRawStorage(currentEpoch)
+	rs, err := db.GetRawStorage(currentEpoch)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return nil, err
 	}
-	return si, nil
+	return rs, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -67,25 +67,23 @@ func (db *Database) GetRawStorage(epoch uint32) (*RawStorage, error) {
 		utils.DebugTrace(db.logger, err)
 		return nil, err
 	}
-	si := &RawStorage{}
-	err = si.Unmarshal(v)
+	rs := &RawStorage{}
+	err = rs.Unmarshal(v)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return nil, err
 	}
-	return si, nil
-	// Look up currentEpoch
-	// Look up corresponding RawStorage
+	return rs, nil
 }
 
 // SetRawStorage sets the RawStorage for epoch in the database
-func (db *Database) SetRawStorage(epoch uint32, si *RawStorage) error {
+func (db *Database) SetRawStorage(epoch uint32, rs *RawStorage) error {
 	key, err := db.makeRawStorageKey(epoch)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return err
 	}
-	value, err := si.Marshal()
+	value, err := rs.Marshal()
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return err
@@ -96,7 +94,6 @@ func (db *Database) SetRawStorage(epoch uint32, si *RawStorage) error {
 		return err
 	}
 	return nil
-	// Store RawStorage at correct location
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,6 +110,7 @@ func (db *Database) makeCurrentEpochKey() ([]byte, error) {
 }
 
 // GetCurrentEpoch returns the current epoch from the database
+// TODO: What should happen if value is 0 or does not exist?
 func (db *Database) GetCurrentEpoch() (uint32, error) {
 	key, err := db.makeCurrentEpochKey()
 	if err != nil {
@@ -130,7 +128,6 @@ func (db *Database) GetCurrentEpoch() (uint32, error) {
 		return 0, err
 	}
 	return value, nil
-	// Look up currentEpoch
 }
 
 // SetCurrentEpoch sets the current epoch in the database
@@ -150,7 +147,6 @@ func (db *Database) SetCurrentEpoch(epoch uint32) error {
 		return err
 	}
 	return nil
-	// Store value at correct location
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -205,5 +201,4 @@ func (db *Database) SetHighestEpoch(epoch uint32) error {
 		return err
 	}
 	return nil
-	// Set highestEpoch at the correct location
 }

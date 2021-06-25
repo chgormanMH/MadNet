@@ -62,20 +62,6 @@ func (rs *RawStorage) Copy() (*RawStorage, error) {
 	return c, nil
 }
 
-// Overwrite replaces the current RawStorage contents with the copy
-// taken as an argument
-func (rs *RawStorage) Overwrite(c *RawStorage) error {
-	cBytes, err := c.Marshal()
-	if err != nil {
-		return err
-	}
-	err = rs.Unmarshal(cBytes)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // standardParameters initializes RawStorage with the standard (original)
 // parameters for the system.
 func (rs *RawStorage) standardParameters() {

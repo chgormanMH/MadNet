@@ -76,10 +76,8 @@ func (s *Storage) Init(database *Database) error {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
-		s.currentEpoch = currentEpoch
-	} else {
-		s.currentEpoch = currentEpoch
 	}
+	s.currentEpoch = currentEpoch
 
 	s.rawStorage = &RawStorage{}
 	rs, err := s.database.GetCurrentRawStorage()
@@ -99,7 +97,11 @@ func (s *Storage) Init(database *Database) error {
 			return err
 		}
 	} else {
-		s.rawStorage.Overwrite(rs)
+		s.rawStorage, err = rs.Copy()
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
 	}
 	return nil
 }
@@ -125,7 +127,11 @@ func (s *Storage) UpdateStorageInstance(epoch uint32) error {
 
 	// Check for any updates to parameters that have not been called;
 	//		if some exist, perform those updates.
-	s.CheckForUpdates()
+	err := s.CheckForUpdates()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
 
 	// Search for RawStorage for epoch at correct location.
 	rs, err := s.database.GetRawStorage(epoch)
@@ -141,7 +147,7 @@ func (s *Storage) UpdateStorageInstance(epoch uint32) error {
 			return err
 		}
 	} else {
-		err := s.rawStorage.Overwrite(rs)
+		s.rawStorage, err = rs.Copy()
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err

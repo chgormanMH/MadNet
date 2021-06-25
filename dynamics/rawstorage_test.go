@@ -39,8 +39,8 @@ func TestRawStorageUnmarshal(t *testing.T) {
 }
 
 func TestRawStorageCopy(t *testing.T) {
+	// Copy empty RawStorage
 	rs1 := &RawStorage{}
-	rs1.standardParameters()
 	rs2, err := rs1.Copy()
 	if err != nil {
 		t.Fatal(err)
@@ -54,38 +54,47 @@ func TestRawStorageCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(rs1Bytes, rs2Bytes) {
-		t.Fatal("Should have equal bytes")
+		t.Fatal("Should have equal bytes (1)")
 	}
 
-	s := &Storage{}
-	_, err = s.rawStorage.Copy()
-	if err == nil {
-		t.Fatal("Should have raised error")
-	}
-}
-
-func TestRawStorageOverwrite(t *testing.T) {
-	rs1 := &RawStorage{}
+	// Copy RawStorage with parameters
 	rs1.standardParameters()
-	rs2 := &RawStorage{}
-	err := rs2.Overwrite(rs1)
+	rs2, err = rs1.Copy()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rs1Bytes, err := rs1.Marshal()
+	rs1Bytes, err = rs1.Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rs2Bytes, err := rs2.Marshal()
+	rs2Bytes, err = rs2.Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(rs1Bytes, rs2Bytes) {
-		t.Fatal("Should have equal bytes")
+		t.Fatal("Should have equal bytes (2)")
+	}
+
+	// Copy RawStorage with some parameters set to zero
+	rs1.MaxBytes = 0
+	rs2, err = rs1.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs1Bytes, err = rs1.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs2Bytes, err = rs2.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rs1Bytes, rs2Bytes) {
+		t.Fatal("Should have equal bytes (3)")
 	}
 
 	s := &Storage{}
-	err = rs1.Overwrite(s.rawStorage)
+	_, err = s.rawStorage.Copy()
 	if err == nil {
 		t.Fatal("Should have raised error")
 	}
