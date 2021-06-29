@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// TODO: Do we need to worry about locks here?
-
 // RawStorage is the struct which actually stores everything
 type RawStorage struct {
 	MaxBytes                       uint32        `json:"maxBytes,omitempty"`
@@ -44,6 +42,9 @@ func (rs *RawStorage) Marshal() ([]byte, error) {
 func (rs *RawStorage) Unmarshal(v []byte) error {
 	if rs == nil {
 		return ErrRawStorageNilPointer
+	}
+	if len(v) == 0 {
+		return ErrUnmarshalEmpty
 	}
 	return json.Unmarshal(v, rs)
 }

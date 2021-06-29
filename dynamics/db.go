@@ -18,25 +18,25 @@ type Database struct {
 
 // GetCurrentRawStorage returns the current RawStorage
 // from the database
-func (db *Database) GetCurrentRawStorage() (*RawStorage, error) {
+func (db *Database) GetCurrentRawStorage() (*RawStorage, uint32, error) {
 	// Look up currentEpoch
 	currentEpoch, err := db.GetCurrentEpoch()
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
-		return nil, err
+		return nil, 0, err
 	}
 	if currentEpoch == 0 {
+		return nil, 0, nil
 		// TODO: Need to do something specific if currentEpoch == 0.
 		// Load standard parameters or return error?
-		panic("not implemented")
 	}
 	// Look up corresponding RawStorage
 	rs, err := db.GetRawStorage(currentEpoch)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
-		return nil, err
+		return nil, 0, err
 	}
-	return rs, nil
+	return rs, currentEpoch, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////

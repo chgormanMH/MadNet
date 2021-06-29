@@ -41,6 +41,51 @@ func initializeDB() *Database {
 	return db
 }
 
+func TestGetCurrentRawStorageKey(t *testing.T) {
+	db := initializeDB()
+	rs, currentEpoch, err := db.GetCurrentRawStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentEpoch != 0 {
+		t.Fatal("currentEpoch should be 0")
+	}
+	if rs != nil {
+		t.Fatal("rawStorage should be nil")
+	}
+
+	epochTrue := uint32(1)
+	rsTrue := &RawStorage{}
+	rsTrue.standardParameters()
+	err = db.SetCurrentEpoch(epochTrue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.SetRawStorage(epochTrue, rsTrue)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rs, currentEpoch, err = db.GetCurrentRawStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentEpoch != epochTrue {
+		t.Fatal("currentEpochs do not agree")
+	}
+	rsBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsTrueBytes, err := rsTrue.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rsBytes, rsTrueBytes) {
+		t.Fatal("rawStorage values do not agree")
+	}
+}
+
 func TestMakeRawStorageKey(t *testing.T) {
 	db := initializeDB()
 	epoch := uint32(0)

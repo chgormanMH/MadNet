@@ -31,10 +31,17 @@ func TestRawStorageUnmarshal(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	v = []byte{}
+	rs3 := &RawStorage{}
+	err = rs3.Unmarshal(v)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
 	s := &Storage{}
 	err = s.rawStorage.Unmarshal(v)
 	if err == nil {
-		t.Fatal("Should have raised error")
+		t.Fatal("Should have raised error (2)")
 	}
 }
 
