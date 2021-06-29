@@ -370,9 +370,9 @@ func (ce *Engine) updateLocalStateInternal(txn *badger.Txn, rs *RoundStates) (bo
 	PCCurrent := os.PCCurrent(rcert)
 	PCNCurrent := os.PCNCurrent(rcert)
 	NRCurrent := os.NRCurrent(rcert)
-	PTOExpired := rs.OwnValidatingState.PTOExpired(rcert.RClaims.Height)
-	PVTOExpired := rs.OwnValidatingState.PVTOExpired(rcert.RClaims.Height)
-	PCTOExpired := rs.OwnValidatingState.PCTOExpired(rcert.RClaims.Height)
+	PTOExpired := rs.OwnValidatingState.PTOExpired()
+	PVTOExpired := rs.OwnValidatingState.PVTOExpired()
+	PCTOExpired := rs.OwnValidatingState.PCTOExpired()
 
 	// dispatch to handlers
 	if NRCurrent {

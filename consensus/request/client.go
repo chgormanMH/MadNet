@@ -6,7 +6,6 @@ import (
 	"github.com/MadBase/MadNet/consensus/objs"
 	"github.com/MadBase/MadNet/constants"
 	"github.com/MadBase/MadNet/crypto"
-	"github.com/MadBase/MadNet/dynamics"
 	"github.com/MadBase/MadNet/errorz"
 	"github.com/MadBase/MadNet/interfaces"
 	"github.com/MadBase/MadNet/logging"
@@ -145,16 +144,16 @@ func (rb *Client) RequestP2PGetBlockHeaders(ctx context.Context, blockNums []uin
 			return errorz.ErrInvalid{}.New("too many headers")
 		}
 		for _, hdrbytes := range resp.BlockHeaders {
+			byteCount = byteCount + len(utils.CopySlice(hdrbytes))
+			if byteCount > constants.MaxBytes {
+				reqErr = errorz.ErrBadResponse
+				return errorz.ErrInvalid{}.New("too big of hdr msg")
+			}
 			hdr := &objs.BlockHeader{}
 			err := hdr.UnmarshalBinary(utils.CopySlice(hdrbytes))
 			if err != nil {
 				reqErr = errorz.ErrBadResponse
 				return err
-			}
-			byteCount = byteCount + len(utils.CopySlice(hdrbytes))
-			if byteCount > int(dynamics.GetMaxBytes(hdr.BClaims.Height)) {
-				reqErr = errorz.ErrBadResponse
-				return errorz.ErrInvalid{}.New("too big of hdr msg")
 			}
 			if err := hdr.ValidateSignatures(rb.groupVal); err != nil {
 				reqErr = errorz.ErrBadResponse

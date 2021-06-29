@@ -6,7 +6,6 @@ import (
 
 	"github.com/MadBase/MadNet/consensus/objs"
 	"github.com/MadBase/MadNet/constants"
-	"github.com/MadBase/MadNet/dynamics"
 	"github.com/MadBase/MadNet/errorz"
 	"github.com/MadBase/MadNet/utils"
 
@@ -34,13 +33,12 @@ func (ce *Engine) AddPendingTx(txn *badger.Txn, d []interfaces.Transaction) erro
 
 func (ce *Engine) getValidValue(txn *badger.Txn, rs *RoundStates) ([][]byte, []byte, []byte, []byte, error) {
 	chainID := rs.OwnState.SyncToBH.BClaims.ChainID
-	height := rs.OwnState.SyncToBH.BClaims.Height
-	txs, stateRoot, err := ce.appHandler.GetValidProposal(txn, chainID, height+1, dynamics.GetMaxProposalSize(height+1))
+	txs, stateRoot, err := ce.appHandler.GetValidProposal(txn, chainID, rs.OwnState.SyncToBH.BClaims.Height+1, constants.MaxProposalSize)
 	if err != nil {
 		utils.DebugTrace(ce.logger, err)
 		return nil, nil, nil, nil, err
 	}
-	if err := ce.dm.AddTxs(txn, height+1, txs, false); err != nil {
+	if err := ce.dm.AddTxs(txn, rs.OwnState.SyncToBH.BClaims.Height+1, txs, false); err != nil {
 		utils.DebugTrace(ce.logger, err)
 		return nil, nil, nil, nil, err
 	}
@@ -58,13 +56,13 @@ func (ce *Engine) getValidValue(txn *badger.Txn, rs *RoundStates) ([][]byte, []b
 		utils.DebugTrace(ce.logger, err)
 		return nil, nil, nil, nil, err
 	}
-	headerRoot, err := ce.database.GetHeaderTrieRoot(txn, height)
+	headerRoot, err := ce.database.GetHeaderTrieRoot(txn, rs.OwnState.SyncToBH.BClaims.Height)
 	if err != nil {
 		if err != badger.ErrKeyNotFound {
 			utils.DebugTrace(ce.logger, err)
 			return nil, nil, nil, nil, err
 		}
-		headerRoot = make([]byte, constants.HashLen)
+		headerRoot = make([]byte, 32)
 	}
 	return txHashes, txRootHash, stateRoot, headerRoot, nil
 }
