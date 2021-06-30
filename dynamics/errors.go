@@ -16,4 +16,8 @@ var (
 	// ErrUnmarshalEmpty is an error which is raised whenever attempting
 	// to unmarshal an empty byte slice.
 	ErrUnmarshalEmpty = errors.New("invalid: attempting to unmarshal empty byte slice")
+
+	// ErrKeyNotPresent is an error which is raised when a key is not present
+	// in the database.
+	ErrKeyNotPresent = errors.New("invalid: Key not found")
 )

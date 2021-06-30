@@ -1,6 +1,7 @@
 package dynamics
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -65,32 +66,37 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 	s.logger = logger
 
 	s.rawStorage = &RawStorage{}
-	rs, currentEpoch, err := s.database.GetCurrentRawStorage()
+	// Get currentEpoch and associated rawStorage values
+	currentEpoch, err := s.database.GetCurrentEpoch()
 	if err != nil {
-		utils.DebugTrace(s.logger, err)
-		return err
-	}
-	// ^^^ TODO:
-	//	   Should this take in epoch as argument?
-	//	   If so, how would be know what the current epoch actually is?
-	if currentEpoch == 0 {
-		currentEpoch = 1
-		// ^^^ TODO: should we assume this is the initialization?
-		// No RawStorage present; set standard parameters
+		if !errors.Is(err, ErrKeyNotPresent) {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		// currentEpoch is not set;
+		// we load standard parameters
+		s.currentEpoch = 1
 		s.rawStorage.standardParameters()
-		err := s.database.SetRawStorage(currentEpoch, s.rawStorage)
+		err := s.database.SetRawStorage(s.currentEpoch, s.rawStorage)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	} else {
+		// No error
+		s.currentEpoch = currentEpoch
+		rs, err := s.database.GetRawStorage(s.currentEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
 		s.rawStorage, err = rs.Copy()
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	}
-	s.currentEpoch = currentEpoch
+
 	return nil
 }
 

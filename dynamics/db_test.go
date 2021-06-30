@@ -18,7 +18,7 @@ func (m *mockRawDB) GetValue(key []byte) ([]byte, error) {
 	strKey := string(key)
 	strValue, ok := m.rawDB[strKey]
 	if !ok {
-		return nil, nil
+		return nil, ErrKeyNotPresent
 	}
 	value := []byte(strValue)
 	return value, nil
@@ -39,51 +39,6 @@ func initializeDB() *Database {
 	mock.rawDB = make(map[string]string)
 	db.rawDB = mock
 	return db
-}
-
-func TestGetCurrentRawStorageKey(t *testing.T) {
-	db := initializeDB()
-	rs, currentEpoch, err := db.GetCurrentRawStorage()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if currentEpoch != 0 {
-		t.Fatal("currentEpoch should be 0")
-	}
-	if rs != nil {
-		t.Fatal("rawStorage should be nil")
-	}
-
-	epochTrue := uint32(1)
-	rsTrue := &RawStorage{}
-	rsTrue.standardParameters()
-	err = db.SetCurrentEpoch(epochTrue)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = db.SetRawStorage(epochTrue, rsTrue)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs, currentEpoch, err = db.GetCurrentRawStorage()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if currentEpoch != epochTrue {
-		t.Fatal("currentEpochs do not agree")
-	}
-	rsBytes, err := rs.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rsTrueBytes, err := rsTrue.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(rsBytes, rsTrueBytes) {
-		t.Fatal("rawStorage values do not agree")
-	}
 }
 
 func TestMakeRawStorageKey(t *testing.T) {
@@ -126,18 +81,23 @@ func TestMakeRawStorageKey(t *testing.T) {
 func TestGetSetRawStorage(t *testing.T) {
 	db := initializeDB()
 	epoch := uint32(0)
-	_, err := db.GetRawStorage(epoch)
+	rs := &RawStorage{}
+	err := db.SetRawStorage(epoch, rs)
 	if err == nil {
 		t.Fatal("Should have raised error (1)")
 	}
 
-	rs := &RawStorage{}
-	err = db.SetRawStorage(epoch, rs)
+	_, err = db.GetRawStorage(epoch)
 	if err == nil {
 		t.Fatal("Should have raised error (2)")
 	}
 
 	epoch = uint32(1)
+	_, err = db.GetRawStorage(epoch)
+	if err == nil {
+		t.Fatal("Should have raised error (3)")
+	}
+
 	rs.standardParameters()
 	err = db.SetRawStorage(epoch, rs)
 	if err != nil {
@@ -181,28 +141,24 @@ func TestMakeCurrentEpochKey(t *testing.T) {
 
 func TestGetSetCurrentEpoch(t *testing.T) {
 	db := initializeDB()
-	epoch := uint32(0)
-	err := db.SetCurrentEpoch(epoch)
+	_, err := db.GetCurrentEpoch()
 	if err == nil {
-		t.Fatal("Should have raised error")
+		t.Fatal("Should have raised error (1)")
 	}
 
-	// No CurrentEpoch present in database; should return 0
-	curEpoch, err := db.GetCurrentEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if curEpoch != 0 {
-		t.Fatal("currentEpoch should be 0")
+	epoch := uint32(0)
+	err = db.SetCurrentEpoch(epoch)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
 	}
 
 	// Set currentEpoch in database and then check
-	epoch = uint32(1)
+	epoch = 1
 	err = db.SetCurrentEpoch(epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	curEpoch, err = db.GetCurrentEpoch()
+	curEpoch, err := db.GetCurrentEpoch()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +167,7 @@ func TestGetSetCurrentEpoch(t *testing.T) {
 	}
 
 	// Set currentEpoch in database and then check (again)
-	epoch = uint32(25519)
+	epoch = 25519
 	err = db.SetCurrentEpoch(epoch)
 	if err != nil {
 		t.Fatal(err)
@@ -223,6 +179,21 @@ func TestGetSetCurrentEpoch(t *testing.T) {
 	if curEpoch != epoch {
 		t.Fatal("currentEpochs are not equal (2)")
 	}
+
+	// Set currentEpoch in database and then check (another time)
+	epoch = 4294967295
+	err = db.SetCurrentEpoch(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	curEpoch, err = db.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if curEpoch != epoch {
+		t.Fatal("currentEpochs are not equal (2)")
+	}
+
 }
 
 func TestMakeHighestEpochKey(t *testing.T) {
@@ -244,25 +215,21 @@ func TestGetSetHighestEpoch(t *testing.T) {
 	epoch := uint32(0)
 	err := db.SetHighestEpoch(epoch)
 	if err == nil {
-		t.Fatal("Should have raised error")
+		t.Fatal("Should have raised error (1)")
 	}
 
-	// No HighestEpoch present in database; should return 0
-	highestEpoch, err := db.GetHighestEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if highestEpoch != 0 {
-		t.Fatal("highestEpoch should be 0")
+	_, err = db.GetHighestEpoch()
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
 	}
 
 	// Set highestEpoch in database and check
-	epoch = uint32(1)
+	epoch = 1
 	err = db.SetHighestEpoch(epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	highestEpoch, err = db.GetHighestEpoch()
+	highestEpoch, err := db.GetHighestEpoch()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +238,7 @@ func TestGetSetHighestEpoch(t *testing.T) {
 	}
 
 	// Set highestEpoch in database and check (again)
-	epoch = uint32(25519)
+	epoch = 25519
 	err = db.SetHighestEpoch(epoch)
 	if err != nil {
 		t.Fatal(err)
@@ -282,5 +249,19 @@ func TestGetSetHighestEpoch(t *testing.T) {
 	}
 	if highestEpoch != epoch {
 		t.Fatal("highestEpochs are not equal (2)")
+	}
+
+	// Set highestEpoch in database and check (again)
+	epoch = 4294967295
+	err = db.SetHighestEpoch(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	highestEpoch, err = db.GetHighestEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if highestEpoch != epoch {
+		t.Fatal("highestEpochs are not equal (3)")
 	}
 }

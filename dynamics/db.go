@@ -16,33 +16,6 @@ type Database struct {
 	logger *logrus.Logger
 }
 
-// GetCurrentRawStorage returns the current RawStorage
-// from the database
-func (db *Database) GetCurrentRawStorage() (*RawStorage, uint32, error) {
-	// Look up currentEpoch
-	currentEpoch, err := db.GetCurrentEpoch()
-	if err != nil {
-		utils.DebugTrace(db.logger, err)
-		return nil, 0, err
-	}
-	if currentEpoch == 0 {
-		return nil, 0, nil
-		// TODO: Need to do something specific if currentEpoch == 0.
-		// Load standard parameters or return error?
-	}
-	// Look up corresponding RawStorage
-	rs, err := db.GetRawStorage(currentEpoch)
-	if err != nil {
-		utils.DebugTrace(db.logger, err)
-		return nil, 0, err
-	}
-	return rs, currentEpoch, nil
-}
-
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-
 func (db *Database) makeRawStorageKey(epoch uint32) ([]byte, error) {
 	if epoch == 0 {
 		return nil, ErrZeroEpoch
@@ -110,16 +83,12 @@ func (db *Database) makeCurrentEpochKey() []byte {
 }
 
 // GetCurrentEpoch returns the current epoch from the database
-// TODO: What should happen if value is 0 or does not exist?
 func (db *Database) GetCurrentEpoch() (uint32, error) {
 	key := db.makeCurrentEpochKey()
 	v, err := db.rawDB.GetValue(key)
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return 0, err
-	}
-	if v == nil {
-		return 0, nil
 	}
 	value, err := utils.UnmarshalUint32(v)
 	if err != nil {
@@ -165,9 +134,6 @@ func (db *Database) GetHighestEpoch() (uint32, error) {
 	if err != nil {
 		utils.DebugTrace(db.logger, err)
 		return 0, err
-	}
-	if v == nil {
-		return 0, nil
 	}
 	value, err := utils.UnmarshalUint32(v)
 	if err != nil {
