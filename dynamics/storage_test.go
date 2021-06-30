@@ -176,5 +176,71 @@ func TestStorageInitialized(t *testing.T) {
 	if downloadTimeoutReturned != downloadTO {
 		t.Fatal("Incorrect downloadTimeout")
 	}
+}
 
+// Test success of UpdateStorageInstance
+func TestStorageUpdateInstance1(t *testing.T) {
+	s := initializeStorage()
+	epoch := uint32(25519)
+
+	rsTrue := &RawStorage{}
+	rsTrue.standardParameters()
+	rsTrueBytes, err := rsTrue.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.UpdateStorageInstance(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsBytes, err := s.rawStorage.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rsBytes, rsTrueBytes) {
+		t.Fatal("rawStorage values do not match")
+	}
+}
+
+// Test success of UpdateStorageInstance again
+func TestStorageUpdateInstance2(t *testing.T) {
+	s := initializeStorage()
+	epoch := uint32(25519)
+	err := s.database.SetRawStorage(epoch, s.rawStorage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rsTrue := &RawStorage{}
+	rsTrue.standardParameters()
+	rsTrueBytes, err := rsTrue.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.UpdateStorageInstance(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsBytes, err := s.rawStorage.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rsBytes, rsTrueBytes) {
+		t.Fatal("rawStorage values do not match")
+	}
+}
+
+// Test failure of UpdateStorageInstance
+func TestStorageUpdateInstance3(t *testing.T) {
+	s := initializeStorage()
+	epoch := uint32(25519)
+	s.rawStorage = nil
+	// This should fail because we have an invalid rawStorage value
+	// and we are assuming we are able to use the current rawStorage value
+	err := s.UpdateStorageInstance(epoch)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
 }

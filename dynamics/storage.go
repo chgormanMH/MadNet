@@ -96,7 +96,6 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -110,32 +109,39 @@ func (s *Storage) Start() {
 
 // CheckForUpdates looks for updates to system parameters
 func (s *Storage) CheckForUpdates() error {
+	select {
+	case <-s.startChan:
+	}
 	return nil
 }
 
 // UpdateStorageInstance updates RawStorage to the correct value
 // defined by the epoch.
 func (s *Storage) UpdateStorageInstance(epoch uint32) error {
+	select {
+	case <-s.startChan:
+	}
 	s.Lock()
 	defer s.Unlock()
 
 	// Check for any updates to parameters that have not been called;
-	//		if some exist, perform those updates.
+	// if some exist, perform those updates.
 	err := s.CheckForUpdates()
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
 		return err
 	}
 
-	// Search for RawStorage for epoch at correct location.
+	// Search for RawStorage for epoch at correct location
 	rs, err := s.database.GetRawStorage(epoch)
 	if err != nil {
-		utils.DebugTrace(s.logger, err)
-		return err
-	}
-	if rs == nil {
-		// Not present; continue using current one and store it
-		err := s.database.SetRawStorage(epoch, rs)
+		if !errors.Is(err, ErrKeyNotPresent) {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		// There is no current rawStorage for the specified epoch;
+		// continue to use current rawStorage
+		err = s.database.SetRawStorage(epoch, s.rawStorage)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
