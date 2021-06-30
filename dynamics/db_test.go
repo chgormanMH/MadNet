@@ -31,9 +31,14 @@ func (m *mockRawDB) SetValue(key []byte, value []byte) error {
 	return nil
 }
 
-func initializeDB() *Database {
-	db := &Database{}
+func newLogger() *logrus.Logger {
 	logger := logrus.New()
+	return logger
+}
+
+func initializeDB() *Database {
+	logger := newLogger()
+	db := &Database{}
 	db.logger = logger
 	mock := &mockRawDB{}
 	mock.rawDB = make(map[string]string)
