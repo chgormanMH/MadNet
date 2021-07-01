@@ -29,8 +29,27 @@ func TestStorageInit1(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Nothing was initialized, so we should have currentEpoch == 1
 	if s.currentEpoch != 1 {
 		t.Fatal("invalid currentEpoch: should be 1")
+	}
+
+	// Check currentEpoch == 1 (in the database)
+	currentEpoch, err := s.database.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentEpoch != s.currentEpoch {
+		t.Fatal("invalid currentEpoch: does not match current value")
+	}
+
+	// Check highestEpoch == 1 (in database)
+	highestEpoch, err := s.database.GetHighestEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if highestEpoch != 1 {
+		t.Fatal("invalid highestEpoch: should be 1")
 	}
 
 	rs := &RawStorage{}
@@ -40,6 +59,7 @@ func TestStorageInit1(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Check rawStorage == standardParameters
 	storageRSBytes, err := s.rawStorage.Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -49,17 +69,113 @@ func TestStorageInit1(t *testing.T) {
 	}
 }
 
-// Test Storage Init with database initialized
+// Test Storage Init with database initialized for currentEpoch
+// and associated rawStorage, but not highestEpoch
 func TestStorageInit2(t *testing.T) {
 	storageLogger := newLogger()
 	database := initializeDB()
 
 	// Initialize database
 	epoch := uint32(25519)
-	database.SetCurrentEpoch(epoch)
+	err := database.SetCurrentEpoch(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
 	rsTrue := &RawStorage{}
 	rsTrue.standardParameters()
-	err := database.SetRawStorage(epoch, rsTrue)
+	err = database.SetRawStorage(epoch, rsTrue)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Storage{}
+	err = s.Init(database, storageLogger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure currentEpoch == epoch
+	if s.currentEpoch != epoch {
+		t.Fatal("invalid currentEpoch")
+	}
+
+	// Ensure currentEpoch matches value from database
+	currentEpoch, err := s.database.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentEpoch != s.currentEpoch {
+		t.Fatal("invalid currentEpoch: does not match current value")
+	}
+
+	// Ensure highestEpoch is now set to epoch
+	highestEpoch, err := s.database.GetHighestEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if highestEpoch != epoch {
+		t.Fatal("invalid highestEpoch: should match epoch variable")
+	}
+
+	rs := &RawStorage{}
+	rs.standardParameters()
+	rsBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check rawStorage == standardParameters
+	storageRSBytes, err := s.rawStorage.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rsBytes, storageRSBytes) {
+		t.Fatal("rawStorage values do not match")
+	}
+}
+
+// Test Storage Init with database initialized incorrectly:
+// currentEpoch is set but no associated rawStorage.
+func TestStorageInit3(t *testing.T) {
+	storageLogger := newLogger()
+	database := initializeDB()
+
+	// Initialize database with current epoch but no rawStorage;
+	// this should raise an error during initialization
+	// when running GetRawStorage.
+	epoch := uint32(25519)
+	err := database.SetCurrentEpoch(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Storage{}
+	err = s.Init(database, storageLogger)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
+}
+
+// Test Storage Init with database initialized again;
+// currentEpoch is set with associated rawStorage, but highestEpoch
+// is invalid (highestEpoch < currentEpoch).
+func TestStorageInit4(t *testing.T) {
+	storageLogger := newLogger()
+	database := initializeDB()
+
+	// Initialize database
+	epoch := uint32(25519)
+	err := database.SetCurrentEpoch(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = database.SetHighestEpoch(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsTrue := &RawStorage{}
+	rsTrue.standardParameters()
+	err = database.SetRawStorage(epoch, rsTrue)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +190,22 @@ func TestStorageInit2(t *testing.T) {
 		t.Fatal("invalid currentEpoch")
 	}
 
+	currentEpoch, err := s.database.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentEpoch != s.currentEpoch {
+		t.Fatal("invalid currentEpoch: does not match current value")
+	}
+
+	highestEpoch, err := s.database.GetHighestEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if highestEpoch != epoch {
+		t.Fatal("invalid highestEpoch: should match epoch variable")
+	}
+
 	rs := &RawStorage{}
 	rs.standardParameters()
 	rsBytes, err := rs.Marshal()
@@ -89,24 +221,6 @@ func TestStorageInit2(t *testing.T) {
 		t.Fatal("rawStorage values do not match")
 	}
 }
-
-// Test Storage Init with database initialized incorrectly
-func TestStorageInit3(t *testing.T) {
-	storageLogger := newLogger()
-	database := initializeDB()
-
-	// Initialize database with current epoch but no rawStorage;
-	// this should lead to an error
-	epoch := uint32(25519)
-	database.SetCurrentEpoch(epoch)
-
-	s := &Storage{}
-	err := s.Init(database, storageLogger)
-	if err == nil {
-		t.Fatal("Should have raised error")
-	}
-}
-
 func TestStorageStart(t *testing.T) {
 	storageLogger := newLogger()
 	database := initializeDB()
@@ -179,7 +293,7 @@ func TestStorageInitialized(t *testing.T) {
 }
 
 // Test success of UpdateStorageInstance
-func TestStorageUpdateInstance1(t *testing.T) {
+func TestStorageLoadStorage1(t *testing.T) {
 	s := initializeStorage()
 	epoch := uint32(25519)
 
@@ -190,7 +304,7 @@ func TestStorageUpdateInstance1(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = s.UpdateStorageInstance(epoch)
+	err = s.LoadStorage(epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +318,7 @@ func TestStorageUpdateInstance1(t *testing.T) {
 }
 
 // Test success of UpdateStorageInstance again
-func TestStorageUpdateInstance2(t *testing.T) {
+func TestStorageLoadStorage2(t *testing.T) {
 	s := initializeStorage()
 	epoch := uint32(25519)
 	err := s.database.SetRawStorage(epoch, s.rawStorage)
@@ -219,7 +333,7 @@ func TestStorageUpdateInstance2(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = s.UpdateStorageInstance(epoch)
+	err = s.LoadStorage(epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,13 +347,13 @@ func TestStorageUpdateInstance2(t *testing.T) {
 }
 
 // Test failure of UpdateStorageInstance
-func TestStorageUpdateInstance3(t *testing.T) {
+func TestStorageLoadStorage3(t *testing.T) {
 	s := initializeStorage()
 	epoch := uint32(25519)
 	s.rawStorage = nil
 	// This should fail because we have an invalid rawStorage value
 	// and we are assuming we are able to use the current rawStorage value
-	err := s.UpdateStorageInstance(epoch)
+	err := s.LoadStorage(epoch)
 	if err == nil {
 		t.Fatal("Should have raised error")
 	}

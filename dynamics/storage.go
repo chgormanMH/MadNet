@@ -25,9 +25,6 @@ ON THE EPOCH BOUNDARY OF NOT ACTIVE TO ACTIVE, THE STORAGE STRUCT MUST BE UPDATE
 // The point is that these values are essentially constant but may be changed
 // in future.
 
-// TODO: Will need a data structure to store more than just the most recent
-//		 parameter value.
-
 // StorageGetInterface is the interface that all Storage structs must match
 // to be valid. These will be used to store the constants which may change
 // each epoch as governance determines.
@@ -75,9 +72,15 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 		}
 		// currentEpoch is not set;
 		// we load standard parameters
-		s.currentEpoch = 1
+		currentEpoch = 1
+		s.currentEpoch = currentEpoch
+		err = s.database.SetCurrentEpoch(s.currentEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
 		s.rawStorage.standardParameters()
-		err := s.database.SetRawStorage(s.currentEpoch, s.rawStorage)
+		err = s.database.SetRawStorage(s.currentEpoch, s.rawStorage)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
@@ -96,6 +99,31 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 			return err
 		}
 	}
+
+	// Look for highestEpoch and set its value if necessary
+	highestEpoch, err := s.database.GetHighestEpoch()
+	if err != nil {
+		if !errors.Is(err, ErrKeyNotPresent) {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		highestEpoch = currentEpoch
+		err = s.database.SetHighestEpoch(highestEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+	}
+	// Ensure highestEpoch >= currentEpoch
+	if highestEpoch < currentEpoch {
+		highestEpoch = currentEpoch
+		err = s.database.SetHighestEpoch(highestEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -115,9 +143,9 @@ func (s *Storage) CheckForUpdates() error {
 	return nil
 }
 
-// UpdateStorageInstance updates RawStorage to the correct value
+// LoadStorage updates RawStorage to the correct value
 // defined by the epoch.
-func (s *Storage) UpdateStorageInstance(epoch uint32) error {
+func (s *Storage) LoadStorage(epoch uint32) error {
 	select {
 	case <-s.startChan:
 	}
