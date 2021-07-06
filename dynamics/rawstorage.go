@@ -1,6 +1,7 @@
 package dynamics
 
 import (
+	"bytes"
 	"encoding/json"
 	"math/big"
 	"time"
@@ -61,6 +62,62 @@ func (rs *RawStorage) Copy() (*RawStorage, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// UpdateValue updates the field with the appropriate value.
+// It checks the field and value are valid before updating.
+//
+// TODO: this actually needs to perform a proper update and not just
+// 		 unmarshal. This is because some of the other values may depend on
+//		 the new, updated value. Need to look at this more.
+func (rs *RawStorage) UpdateValue(field, value string) error {
+	panic("not implemented")
+	jsonBytes, err := checkUpdateValue(field, value)
+	if err != nil {
+		return err
+	}
+	err = rs.Unmarshal(jsonBytes)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkUpdateValue confirms that the field and value strings produce
+// a valid update for RawStorage.
+//
+// TODO: Need to make sure that jsonBytes only correspond to one valid update.
+//		 Could possibly do this at a higher level.
+func checkUpdateValue(field, value string) ([]byte, error) {
+	jsonBytes := makeJSONBytes(field, value)
+	validJSON := json.Valid(jsonBytes)
+	if !validJSON {
+		return nil, ErrInvalidUpdateValue
+	}
+	rsEmpty := &RawStorage{}
+	rsEmptyBytes, err := rsEmpty.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	rsNew := &RawStorage{}
+	err = rsNew.Unmarshal(jsonBytes)
+	if err != nil {
+		return nil, err
+	}
+	rsNewBytes, err := rsNew.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	if bytes.Equal(rsEmptyBytes, rsNewBytes) {
+		return nil, ErrInvalidUpdateValue
+	}
+	return jsonBytes, nil
+}
+
+// makeJSONBytes returns the correct byte slice for a json field, value pair
+func makeJSONBytes(field, value string) []byte {
+	jsonBytes := []byte("{\"" + field + "\":" + value + "}")
+	return jsonBytes
 }
 
 // standardParameters initializes RawStorage with the standard (original)

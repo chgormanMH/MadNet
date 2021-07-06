@@ -20,4 +20,8 @@ var (
 	// ErrKeyNotPresent is an error which is raised when a key is not present
 	// in the database.
 	ErrKeyNotPresent = errors.New("invalid: Key not found")
+
+	// ErrInvalidUpdateValue is an error which is returned when the data
+	// for updating rawStorage is invalid.
+	ErrInvalidUpdateValue = errors.New("invalid update value for storage")
 )

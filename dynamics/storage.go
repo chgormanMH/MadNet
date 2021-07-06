@@ -143,6 +143,53 @@ func (s *Storage) CheckForUpdates() error {
 	return nil
 }
 
+// UpdateStorage updates the database to include changes that must be made
+// to the database
+func (s *Storage) UpdateStorage() error {
+	select {
+	case <-s.startChan:
+	}
+	return nil
+}
+
+// UpdateStorageValue ...
+func (s *Storage) UpdateStorageValue(field, value string, epoch uint32) error {
+	select {
+	case <-s.startChan:
+	}
+	lowestEpoch := epoch
+	if lowestEpoch < s.currentEpoch {
+		lowestEpoch = s.currentEpoch
+	}
+	highestEpoch, err := s.database.GetHighestEpoch()
+	if err != nil {
+		return err
+	}
+	if epoch > highestEpoch {
+		// We now need to update highestEpoch to reflect this change
+		highestEpoch = epoch
+	}
+	for epochCurr := lowestEpoch; epochCurr <= highestEpoch; epochCurr++ {
+		rsCurr, err := s.database.GetRawStorage(epochCurr)
+		if err != nil {
+			return err
+		}
+		err = rsCurr.UpdateValue(field, value)
+		if err != nil {
+			return err
+		}
+		err = s.database.SetRawStorage(epochCurr, rsCurr)
+		if err != nil {
+			return err
+		}
+	}
+	err = s.database.SetHighestEpoch(highestEpoch)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // LoadStorage updates RawStorage to the correct value
 // defined by the epoch.
 func (s *Storage) LoadStorage(epoch uint32) error {

@@ -233,6 +233,8 @@ func TestStorageStart(t *testing.T) {
 	s.Start()
 }
 
+// Test ensures we panic when running Start before Init.
+// This happens from attempting to close a closed channel.
 func TestStorageStartFail(t *testing.T) {
 	s := &Storage{}
 	defer func() {
@@ -243,6 +245,7 @@ func TestStorageStartFail(t *testing.T) {
 	s.Start()
 }
 
+// Test ensures storage has is initialized to the correct values.
 func TestStorageInitialized(t *testing.T) {
 	s := initializeStorage()
 

@@ -2,6 +2,7 @@ package dynamics
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 	"time"
 )
@@ -323,5 +324,94 @@ func TestRawStorageConsensusTimeouts(t *testing.T) {
 	retDBRNRTOv3 := rs.GetDeadBlockRoundNextRoundTimeout()
 	if retDBRNRTOv3 != ((5 * (propValue + preVoteValue + preCommitValue)) / 2) {
 		t.Fatal("Should be equal (12)")
+	}
+}
+
+/*
+func TestRawStorageUpdateValueGood(t *testing.T) {
+	rs := &RawStorage{}
+
+	retMaxBytes := rs.GetMaxBytes()
+	if retMaxBytes != 0 {
+		t.Fatal("value should be zero")
+	}
+
+	field := "maxBytes"
+	value := uint32(1000)
+	valueStr := strconv.Itoa(int(value))
+	err := rs.UpdateValue(field, valueStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retMaxBytesNew := rs.GetMaxBytes()
+	if retMaxBytesNew != value {
+		t.Fatal("incorrect value: should match submitted value")
+	}
+}
+
+func TestRawStorageUpdateBad(t *testing.T) {
+	rs := &RawStorage{}
+
+	field := "thisShouldFail"
+	value := uint32(1000)
+	valueStr := strconv.Itoa(int(value))
+	err := rs.UpdateValue(field, valueStr)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Did not raise an error or the correct error")
+	}
+}
+*/
+
+func TestMakeJSONBytes(t *testing.T) {
+	field := "field"
+	value := "value"
+	jsonBytesTrue := []byte("{\"" + field + "\":" + value + "}")
+	jsonBytes := makeJSONBytes(field, value)
+	if !bytes.Equal(jsonBytes, jsonBytesTrue) {
+		t.Fatal("jsonBytes do not agree")
+	}
+}
+
+// Should produce valid update value
+func TestCheckUpdateValueGood(t *testing.T) {
+	fieldGood := "maxBytes"
+	valueGood := "100000"
+	jsonBytes, err := checkUpdateValue(fieldGood, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonBytesTrue := makeJSONBytes(fieldGood, valueGood)
+	if !bytes.Equal(jsonBytes, jsonBytesTrue) {
+		t.Fatal("invalid jsonBytes returned")
+	}
+}
+
+// Should produce error for invalid field.
+func TestCheckUpdateValueBad1(t *testing.T) {
+	fieldBad1 := "field"
+	valueBad1 := "1000"
+	_, err := checkUpdateValue(fieldBad1, valueBad1)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised error for invalid update value")
+	}
+}
+
+// Should produce an error for submitting correct field but invalid value
+func TestCheckUpdateValueBad2(t *testing.T) {
+	fieldBad2 := "maxBytes"
+	valueBad2 := "\"value\""
+	_, err := checkUpdateValue(fieldBad2, valueBad2)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
+}
+
+// Should produce an error for submitting correct field but invalid value
+func TestCheckUpdateValueBad3(t *testing.T) {
+	fieldBad3 := "maxBytes"
+	valueBad3 := "value"
+	_, err := checkUpdateValue(fieldBad3, valueBad3)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised error")
 	}
 }
