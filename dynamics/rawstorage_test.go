@@ -2,7 +2,6 @@ package dynamics
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 	"time"
 )
@@ -372,17 +371,24 @@ func TestMakeJSONBytes(t *testing.T) {
 	}
 }
 
+/*
 // Should produce valid update value
-func TestCheckUpdateValueGood(t *testing.T) {
+func TestCheckUpdateValueGood1(t *testing.T) {
 	fieldGood := "maxBytes"
 	valueGood := "100000"
-	jsonBytes, err := checkUpdateValue(fieldGood, valueGood)
+	err := checkUpdateValue(fieldGood, valueGood)
 	if err != nil {
 		t.Fatal(err)
 	}
-	jsonBytesTrue := makeJSONBytes(fieldGood, valueGood)
-	if !bytes.Equal(jsonBytes, jsonBytesTrue) {
-		t.Fatal("invalid jsonBytes returned")
+}
+
+// Should produce valid update value
+func TestCheckUpdateValueGood2(t *testing.T) {
+	fieldGood := "maxBytes"
+	valueGood := "0"
+	err := checkUpdateValue(fieldGood, valueGood)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -390,7 +396,7 @@ func TestCheckUpdateValueGood(t *testing.T) {
 func TestCheckUpdateValueBad1(t *testing.T) {
 	fieldBad1 := "field"
 	valueBad1 := "1000"
-	_, err := checkUpdateValue(fieldBad1, valueBad1)
+	err := checkUpdateValue(fieldBad1, valueBad1)
 	if !errors.Is(err, ErrInvalidUpdateValue) {
 		t.Fatal("Should have raised error for invalid update value")
 	}
@@ -400,7 +406,7 @@ func TestCheckUpdateValueBad1(t *testing.T) {
 func TestCheckUpdateValueBad2(t *testing.T) {
 	fieldBad2 := "maxBytes"
 	valueBad2 := "\"value\""
-	_, err := checkUpdateValue(fieldBad2, valueBad2)
+	err := checkUpdateValue(fieldBad2, valueBad2)
 	if err == nil {
 		t.Fatal("Should have raised error")
 	}
@@ -410,8 +416,233 @@ func TestCheckUpdateValueBad2(t *testing.T) {
 func TestCheckUpdateValueBad3(t *testing.T) {
 	fieldBad3 := "maxBytes"
 	valueBad3 := "value"
-	_, err := checkUpdateValue(fieldBad3, valueBad3)
+	err := checkUpdateValue(fieldBad3, valueBad3)
 	if !errors.Is(err, ErrInvalidUpdateValue) {
 		t.Fatal("Should have raised error")
 	}
 }
+*/
+
+/*
+// Should an error for invalid field
+func TestValidFieldValueBad1(t *testing.T) {
+	fieldBad := "invalid"
+	valueBad := ""
+	ok := validFieldValue(fieldBad, valueBad)
+	if ok {
+		t.Fatal("Should not be ok")
+	}
+}
+
+// Should produce valid update value for MaxBytes
+func TestValidFieldValueMaxBytesGood(t *testing.T) {
+	fieldGood := "maxBytes"
+	valueGood := "100000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for MaxBytes
+func TestValidFieldValueMaxBytesBad(t *testing.T) {
+	fieldGood := "maxBytes"
+	valueGood := ""
+	ok := validFieldValue(fieldGood, valueGood)
+	if ok {
+		t.Fatal("Should not be ok")
+	}
+}
+
+// Should produce valid update value for MaxProposalSize
+func TestValidFieldValueMaxProposalSizeGood(t *testing.T) {
+	fieldGood := "maxProposalSize"
+	valueGood := "100000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for ProposalStepTimeout
+func TestValidFieldValueProposalStepTimeoutGood(t *testing.T) {
+	fieldGood := "proposalStepTimeout"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce invalid update value for ProposalStepTimeout
+func TestValidFieldValueProposalStepTimeoutBad1(t *testing.T) {
+	fieldGood := "proposalStepTimeout"
+	valueBad := ""
+	ok := validFieldValue(fieldGood, valueBad)
+	if ok {
+		t.Fatal("Should not be ok")
+	}
+}
+
+// Should produce invalid update value for ProposalStepTimeout
+func TestValidFieldValueProposalStepTimeoutBad2(t *testing.T) {
+	fieldGood := "proposalStepTimeout"
+	valueBad := "-1000000000"
+	ok := validFieldValue(fieldGood, valueBad)
+	if ok {
+		t.Fatal("Should not be ok")
+	}
+}
+
+// Should produce valid update value for PreVoteStepTimeout
+func TestValidFieldValuePreVoteStepTimeoutGood(t *testing.T) {
+	fieldGood := "preVoteStepTimeout"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for PreCommitStepTimeout
+func TestValidFieldValuePreCommitStepTimeoutGood(t *testing.T) {
+	fieldGood := "preCommitStepTimeout"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+*/
+
+/*
+// Should produce valid update value for DeadBlockRoundNextRoundTimeout
+func TestValidFieldValueDBRNRTimeoutGood(t *testing.T) {
+	fieldGood := "deadBlockRoundNextRoundTimeout"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for DownloadTimeout
+func TestValidFieldValueDownloadTimeoutGood(t *testing.T) {
+	fieldGood := "downloadTimeout"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for SrvrMsgTimeout
+func TestValidFieldValueSrvrMsgTimeoutGood(t *testing.T) {
+	fieldGood := "srvrMsgTimeout"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for SrvrMsgTimeout
+func TestValidFieldValueMsgTimeoutGood(t *testing.T) {
+	fieldGood := "msgTimeout"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for MinTxBurnedFee
+func TestValidFieldValueMinTxBurnedFeeGood(t *testing.T) {
+	fieldGood := "minTxBurnedFee"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce invalid update value for MinTxBurnedFee
+func TestValidFieldValueMinTxBurnedFeeBad1(t *testing.T) {
+	fieldGood := "minTxBurnedFee"
+	valueBad := ""
+	ok := validFieldValue(fieldGood, valueBad)
+	if ok {
+		t.Fatal("Should not be ok")
+	}
+}
+
+// Should produce another invalid update value for MinTxBurnedFee
+func TestValidFieldValueMinTxBurnedFeeBad2(t *testing.T) {
+	fieldGood := "minTxBurnedFee"
+	valueBad := "-1000000000"
+	ok := validFieldValue(fieldGood, valueBad)
+	if ok {
+		t.Fatal("Should not be ok")
+	}
+}
+
+// Should produce valid update value for TxValidVersion
+func TestValidFieldValueTxValidVersionGood(t *testing.T) {
+	fieldGood := "txValidVersion"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for MinValueStoreBurnedFee
+func TestValidFieldValueMinValueStoreBurnedFeeGood(t *testing.T) {
+	fieldGood := "minValueStoreBurnedFee"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for ValueStoreTxValidVersion
+func TestValidFieldValueValueStoreTxValidVersionGood(t *testing.T) {
+	fieldGood := "valueStoreTxValidVersion"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for MinAtomicSwapBurnedFee
+func TestValidFieldValueMinAtomicSwapBurnedFeeGood(t *testing.T) {
+	fieldGood := "minAtomicSwapBurnedFee"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for AtomicSwapValidStopEpoch
+func TestValidFieldValueAtomicSwapValidStopEpochGood(t *testing.T) {
+	fieldGood := "atomicSwapValidStopEpoch"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+
+// Should produce valid update value for DataStoreTxValidVersion
+func TestValidFieldValueDataStoreTxValidVersionGood(t *testing.T) {
+	fieldGood := "dataStoreTxValidVersion"
+	valueGood := "1000000000"
+	ok := validFieldValue(fieldGood, valueGood)
+	if !ok {
+		t.Fatal("Should be ok")
+	}
+}
+*/
