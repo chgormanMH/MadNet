@@ -2,6 +2,9 @@ package dynamics
 
 import (
 	"bytes"
+	"errors"
+	"math/big"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -326,323 +329,644 @@ func TestRawStorageConsensusTimeouts(t *testing.T) {
 	}
 }
 
-/*
-func TestRawStorageUpdateValueGood(t *testing.T) {
+func TestRawStorageMinTxBurnedFee(t *testing.T) {
+	rs1 := &RawStorage{}
+
+	v1 := rs1.GetMinTxBurnedFee()
+	if v1.Sign() != 0 {
+		t.Fatal("minTxBurnedFee should be 0")
+	}
+
+	rs2 := &RawStorage{}
+	err := rs2.SetMinTxBurnedFee(nil)
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatal("Should have raised ErrInvalidValue")
+	}
+
+	rs3 := &RawStorage{}
+	value := new(big.Int).SetInt64(-1)
+	err = rs3.SetMinTxBurnedFee(value)
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatal("Should have raised ErrInvalidValue")
+	}
+
+	rs4 := &RawStorage{}
+	value4int := int64(1234567890)
+	value4 := new(big.Int).SetInt64(value4int)
+	err = rs4.SetMinTxBurnedFee(value4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v4 := rs4.GetMinTxBurnedFee()
+	if v4.Cmp(big.NewInt(value4int)) != 0 {
+		t.Fatal("incorrect minTxBurnedFee value")
+	}
+}
+
+func TestRawStorageTxValidVersion(t *testing.T) {
+	rs1 := &RawStorage{}
+	v1 := rs1.GetTxValidVersion()
+	if v1 != 0 {
+		t.Fatal("invalid TxValidVersion")
+	}
+
+	rs2 := &RawStorage{}
+	version2 := uint32(7919)
+	rs2.SetTxValidVersion(version2)
+	v2 := rs2.GetTxValidVersion()
+	if v2 != version2 {
+		t.Fatal("TxValidVersions do not match")
+	}
+}
+
+func TestRawStorageMinValueStoreBurnedFee(t *testing.T) {
+	rs1 := &RawStorage{}
+
+	v1 := rs1.GetMinValueStoreBurnedFee()
+	if v1.Sign() != 0 {
+		t.Fatal("minValueStoreBurnedFee should be 0")
+	}
+
+	rs2 := &RawStorage{}
+	err := rs2.SetMinValueStoreBurnedFee(nil)
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatal("Should have raised ErrInvalidValue")
+	}
+
+	rs3 := &RawStorage{}
+	value := new(big.Int).SetInt64(-1)
+	err = rs3.SetMinValueStoreBurnedFee(value)
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatal("Should have raised ErrInvalidValue")
+	}
+
+	rs4 := &RawStorage{}
+	value4int := int64(1234567890)
+	value4 := new(big.Int).SetInt64(value4int)
+	err = rs4.SetMinValueStoreBurnedFee(value4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v4 := rs4.GetMinValueStoreBurnedFee()
+	if v4.Cmp(big.NewInt(value4int)) != 0 {
+		t.Fatal("incorrect minValueStoreBurnedFee value")
+	}
+}
+
+func TestRawStorageValueStoreTxValidVersion(t *testing.T) {
+	rs1 := &RawStorage{}
+	v1 := rs1.GetValueStoreTxValidVersion()
+	if v1 != 0 {
+		t.Fatal("invalid ValueStoreTxValidVersion")
+	}
+
+	rs2 := &RawStorage{}
+	version2 := uint32(7919)
+	rs2.SetValueStoreTxValidVersion(version2)
+	v2 := rs2.GetValueStoreTxValidVersion()
+	if v2 != version2 {
+		t.Fatal("ValueStoreTxValidVersions do not match")
+	}
+}
+
+func TestRawStorageMinAtomicSwapBurnedFee(t *testing.T) {
+	rs1 := &RawStorage{}
+
+	v1 := rs1.GetMinAtomicSwapBurnedFee()
+	if v1.Sign() != 0 {
+		t.Fatal("minAtomicSwapBurnedFee should be 0")
+	}
+
+	rs2 := &RawStorage{}
+	err := rs2.SetMinAtomicSwapBurnedFee(nil)
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatal("Should have raised ErrInvalidValue")
+	}
+
+	rs3 := &RawStorage{}
+	value := new(big.Int).SetInt64(-1)
+	err = rs3.SetMinAtomicSwapBurnedFee(value)
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatal("Should have raised ErrInvalidValue")
+	}
+
+	rs4 := &RawStorage{}
+	value4int := int64(1234567890)
+	value4 := new(big.Int).SetInt64(value4int)
+	err = rs4.SetMinAtomicSwapBurnedFee(value4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v4 := rs4.GetMinAtomicSwapBurnedFee()
+	if v4.Cmp(big.NewInt(value4int)) != 0 {
+		t.Fatal("incorrect minAtomicSwapBurnedFee value")
+	}
+}
+
+func TestRawStorageAtomicSwapValidStopEpoch(t *testing.T) {
+	rs1 := &RawStorage{}
+	v1 := rs1.GetAtomicSwapValidStopEpoch()
+	if v1 != 0 {
+		t.Fatal("invalid AtomicSwapValidStopEpoch")
+	}
+
+	rs2 := &RawStorage{}
+	version2 := uint32(7919)
+	rs2.SetAtomicSwapValidStopEpoch(version2)
+	v2 := rs2.GetAtomicSwapValidStopEpoch()
+	if v2 != version2 {
+		t.Fatal("AtomicSwapValidStopEpochs do not match")
+	}
+}
+
+func TestRawStorageDataStoreTxValidVersion(t *testing.T) {
+	rs1 := &RawStorage{}
+	v1 := rs1.GetDataStoreTxValidVersion()
+	if v1 != 0 {
+		t.Fatal("invalid DataStoreTxValidVersion")
+	}
+
+	rs2 := &RawStorage{}
+	version2 := uint32(7919)
+	rs2.SetDataStoreTxValidVersion(version2)
+	v2 := rs2.GetDataStoreTxValidVersion()
+	if v2 != version2 {
+		t.Fatal("DataStoreTxValidVersions do not match")
+	}
+}
+
+func TestRawStorageUpdateValueBad(t *testing.T) {
 	rs := &RawStorage{}
-
-	retMaxBytes := rs.GetMaxBytes()
-	if retMaxBytes != 0 {
-		t.Fatal("value should be zero")
-	}
-
-	field := "maxBytes"
-	value := uint32(1000)
-	valueStr := strconv.Itoa(int(value))
-	err := rs.UpdateValue(field, valueStr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	retMaxBytesNew := rs.GetMaxBytes()
-	if retMaxBytesNew != value {
-		t.Fatal("incorrect value: should match submitted value")
-	}
-}
-
-func TestRawStorageUpdateBad(t *testing.T) {
-	rs := &RawStorage{}
-
-	field := "thisShouldFail"
-	value := uint32(1000)
-	valueStr := strconv.Itoa(int(value))
-	err := rs.UpdateValue(field, valueStr)
-	if !errors.Is(err, ErrInvalidUpdateValue) {
-		t.Fatal("Did not raise an error or the correct error")
-	}
-}
-*/
-
-func TestMakeJSONBytes(t *testing.T) {
-	field := "field"
-	value := "value"
-	jsonBytesTrue := []byte("{\"" + field + "\":" + value + "}")
-	jsonBytes := makeJSONBytes(field, value)
-	if !bytes.Equal(jsonBytes, jsonBytesTrue) {
-		t.Fatal("jsonBytes do not agree")
-	}
-}
-
-/*
-// Should produce valid update value
-func TestCheckUpdateValueGood1(t *testing.T) {
-	fieldGood := "maxBytes"
-	valueGood := "100000"
-	err := checkUpdateValue(fieldGood, valueGood)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-// Should produce valid update value
-func TestCheckUpdateValueGood2(t *testing.T) {
-	fieldGood := "maxBytes"
-	valueGood := "0"
-	err := checkUpdateValue(fieldGood, valueGood)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-// Should produce error for invalid field.
-func TestCheckUpdateValueBad1(t *testing.T) {
-	fieldBad1 := "field"
-	valueBad1 := "1000"
-	err := checkUpdateValue(fieldBad1, valueBad1)
-	if !errors.Is(err, ErrInvalidUpdateValue) {
-		t.Fatal("Should have raised error for invalid update value")
-	}
-}
-
-// Should produce an error for submitting correct field but invalid value
-func TestCheckUpdateValueBad2(t *testing.T) {
-	fieldBad2 := "maxBytes"
-	valueBad2 := "\"value\""
-	err := checkUpdateValue(fieldBad2, valueBad2)
+	fieldBad := "invalid"
+	valueBad := ""
+	err := rs.UpdateValue(fieldBad, valueBad)
 	if err == nil {
 		t.Fatal("Should have raised error")
 	}
 }
 
-// Should produce an error for submitting correct field but invalid value
-func TestCheckUpdateValueBad3(t *testing.T) {
-	fieldBad3 := "maxBytes"
-	valueBad3 := "value"
-	err := checkUpdateValue(fieldBad3, valueBad3)
+func TestRawStorageUpdateValueMaxBytes(t *testing.T) {
+	rs := &RawStorage{}
+	field := "maxBytes"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+	retValue := rs.GetMaxBytes()
+	if retValue != 0 {
+		t.Fatal("Incorrect MaxBytes (1)")
+	}
+	retValue = rs.GetMaxProposalSize()
+	if retValue != 0 {
+		t.Fatal("Incorrect MaxProposalSize (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
+	}
+	retValue = rs.GetMaxBytes()
+	if retValue != 0 {
+		t.Fatal("Incorrect MaxBytes (2)")
+	}
+	retValue = rs.GetMaxProposalSize()
+	if retValue != 0 {
+		t.Fatal("Incorrect MaxProposalSize (2)")
+	}
+
+	valueGood := "1000"
+	valueTrue64, err := strconv.ParseUint(valueGood, 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valueTrue := uint32(valueTrue64)
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retValue = rs.GetMaxBytes()
+	if retValue != valueTrue {
+		t.Fatal("Incorrect MaxBytes (3)")
+	}
+	retValue = rs.GetMaxProposalSize()
+	if retValue != valueTrue {
+		t.Fatal("Incorrect MaxProposalSize (3)")
+	}
+}
+
+func TestRawStorageUpdateValueProposalStepTimeout(t *testing.T) {
+	rs := &RawStorage{}
+
+	retProposalStepTO := rs.GetProposalStepTimeout()
+	if retProposalStepTO != 0 {
+		t.Fatal("Incorrect ProposalStepTO (1)")
+	}
+
+	field := "proposalStepTimeout"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
 	if !errors.Is(err, ErrInvalidUpdateValue) {
-		t.Fatal("Should have raised error")
+		t.Fatal("Should have raised ErrInvalidUpdateValue error")
 	}
-}
-*/
 
-/*
-// Should an error for invalid field
-func TestValidFieldValueBad1(t *testing.T) {
-	fieldBad := "invalid"
-	valueBad := ""
-	ok := validFieldValue(fieldBad, valueBad)
-	if ok {
-		t.Fatal("Should not be ok")
-	}
-}
-
-// Should produce valid update value for MaxBytes
-func TestValidFieldValueMaxBytesGood(t *testing.T) {
-	fieldGood := "maxBytes"
-	valueGood := "100000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
-	}
-}
-
-// Should produce valid update value for MaxBytes
-func TestValidFieldValueMaxBytesBad(t *testing.T) {
-	fieldGood := "maxBytes"
-	valueGood := ""
-	ok := validFieldValue(fieldGood, valueGood)
-	if ok {
-		t.Fatal("Should not be ok")
-	}
-}
-
-// Should produce valid update value for MaxProposalSize
-func TestValidFieldValueMaxProposalSizeGood(t *testing.T) {
-	fieldGood := "maxProposalSize"
-	valueGood := "100000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
-	}
-}
-
-// Should produce valid update value for ProposalStepTimeout
-func TestValidFieldValueProposalStepTimeoutGood(t *testing.T) {
-	fieldGood := "proposalStepTimeout"
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	propTrue := time.Duration(valueTrue64)
+	retProposalStepTO = rs.GetProposalStepTimeout()
+	if retProposalStepTO != propTrue {
+		t.Fatal("Incorrect ProposalStepTO (2)")
 	}
 }
 
-// Should produce invalid update value for ProposalStepTimeout
-func TestValidFieldValueProposalStepTimeoutBad1(t *testing.T) {
-	fieldGood := "proposalStepTimeout"
-	valueBad := ""
-	ok := validFieldValue(fieldGood, valueBad)
-	if ok {
-		t.Fatal("Should not be ok")
-	}
-}
+func TestRawStorageUpdateValuePreVoteStepTimeout(t *testing.T) {
+	rs := &RawStorage{}
 
-// Should produce invalid update value for ProposalStepTimeout
-func TestValidFieldValueProposalStepTimeoutBad2(t *testing.T) {
-	fieldGood := "proposalStepTimeout"
-	valueBad := "-1000000000"
-	ok := validFieldValue(fieldGood, valueBad)
-	if ok {
-		t.Fatal("Should not be ok")
+	retPreVoteStepTO := rs.GetPreVoteStepTimeout()
+	if retPreVoteStepTO != 0 {
+		t.Fatal("Incorrect PreVoteStepTO (1)")
 	}
-}
 
-// Should produce valid update value for PreVoteStepTimeout
-func TestValidFieldValuePreVoteStepTimeoutGood(t *testing.T) {
-	fieldGood := "preVoteStepTimeout"
+	field := "preVoteStepTimeout"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised ErrInvalidUpdateValue error")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preVoteTrue := time.Duration(valueTrue64)
+	retPreVoteStepTO = rs.GetPreVoteStepTimeout()
+	if retPreVoteStepTO != preVoteTrue {
+		t.Fatal("Incorrect PreVoteStepTO (2)")
 	}
 }
 
-// Should produce valid update value for PreCommitStepTimeout
-func TestValidFieldValuePreCommitStepTimeoutGood(t *testing.T) {
-	fieldGood := "preCommitStepTimeout"
+func TestRawStorageUpdateValuePreCommitStepTimeout(t *testing.T) {
+	rs := &RawStorage{}
+
+	retPreCommitStepTO := rs.GetPreCommitStepTimeout()
+	if retPreCommitStepTO != 0 {
+		t.Fatal("Incorrect PreCommitStepTO (1)")
+	}
+
+	field := "preCommitStepTimeout"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised ErrInvalidUpdateValue error")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preCommitTrue := time.Duration(valueTrue64)
+	retPreCommitStepTO = rs.GetPreCommitStepTimeout()
+	if retPreCommitStepTO != preCommitTrue {
+		t.Fatal("Incorrect PreCommitStepTO (2)")
 	}
 }
-*/
 
-/*
-// Should produce valid update value for DeadBlockRoundNextRoundTimeout
-func TestValidFieldValueDBRNRTimeoutGood(t *testing.T) {
-	fieldGood := "deadBlockRoundNextRoundTimeout"
+func TestRawStorageUpdateValueMsgTimeout(t *testing.T) {
+	rs := &RawStorage{}
+
+	retMsgTO := rs.GetMsgTimeout()
+	if retMsgTO != 0 {
+		t.Fatal("Incorrect MsgTimeout (1)")
+	}
+
+	field := "msgTimeout"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised ErrInvalidUpdateValue error")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgTrue := time.Duration(valueTrue64)
+	retMsgTO = rs.GetMsgTimeout()
+	if retMsgTO != msgTrue {
+		t.Fatal("Incorrect MsgTimeout (2)")
 	}
 }
 
-// Should produce valid update value for DownloadTimeout
-func TestValidFieldValueDownloadTimeoutGood(t *testing.T) {
-	fieldGood := "downloadTimeout"
+func TestRawStorageUpdateMinTxBurnedFee(t *testing.T) {
+	rs := &RawStorage{}
+
+	retMinTxFee := rs.GetMinTxBurnedFee()
+	if retMinTxFee.Sign() != 0 {
+		t.Fatal("Incorrect MinTxBurnedFee (1)")
+	}
+
+	field := "minTxBurnedFee"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised ErrInvalidUpdateValue error")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue, ok := new(big.Int).SetString(valueGood, 10)
 	if !ok {
-		t.Fatal("Should be ok")
+		t.Fatal("SetString failed")
+	}
+	retMinTxFee = rs.GetMinTxBurnedFee()
+	if retMinTxFee.Cmp(valueTrue) != 0 {
+		t.Fatal("Incorrect MinTxBurnedFee (2)")
 	}
 }
 
-// Should produce valid update value for SrvrMsgTimeout
-func TestValidFieldValueSrvrMsgTimeoutGood(t *testing.T) {
-	fieldGood := "srvrMsgTimeout"
+func TestRawStorageUpdateTxValidVersion(t *testing.T) {
+	rs := &RawStorage{}
+
+	retTxValidVersion := rs.GetTxValidVersion()
+	if retTxValidVersion != 0 {
+		t.Fatal("Incorrect TxValidVersion (1)")
+	}
+
+	field := "txValidVersion"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txValidTrue := uint32(valueTrue64)
+	retTxValidVersion = rs.GetTxValidVersion()
+	if retTxValidVersion != txValidTrue {
+		t.Fatal("Incorrect TxValidVersion (2)")
 	}
 }
 
-// Should produce valid update value for SrvrMsgTimeout
-func TestValidFieldValueMsgTimeoutGood(t *testing.T) {
-	fieldGood := "msgTimeout"
+func TestRawStorageUpdateMinValueStoreBurnedFee(t *testing.T) {
+	rs := &RawStorage{}
+
+	retMinVSFee := rs.GetMinValueStoreBurnedFee()
+	if retMinVSFee.Sign() != 0 {
+		t.Fatal("Incorrect MinValueStoreBurnedFee (1)")
+	}
+
+	field := "minValueStoreBurnedFee"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised ErrInvalidUpdateValue error")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue, ok := new(big.Int).SetString(valueGood, 10)
 	if !ok {
-		t.Fatal("Should be ok")
+		t.Fatal("SetString failed")
+	}
+	retMinVSFee = rs.GetMinValueStoreBurnedFee()
+	if retMinVSFee.Cmp(valueTrue) != 0 {
+		t.Fatal("Incorrect MinValueStoreBurnedFee (2)")
 	}
 }
 
-// Should produce valid update value for MinTxBurnedFee
-func TestValidFieldValueMinTxBurnedFeeGood(t *testing.T) {
-	fieldGood := "minTxBurnedFee"
+func TestRawStorageUpdateValueStoreTxValidVersion(t *testing.T) {
+	rs := &RawStorage{}
+
+	retVSTxValidVersion := rs.GetValueStoreTxValidVersion()
+	if retVSTxValidVersion != 0 {
+		t.Fatal("Incorrect ValueStoreTxValidVersion (1)")
+	}
+
+	field := "valueStoreTxValidVersion"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vsTxValidTrue := uint32(valueTrue64)
+	retVSTxValidVersion = rs.GetValueStoreTxValidVersion()
+	if retVSTxValidVersion != vsTxValidTrue {
+		t.Fatal("Incorrect ValueStoreTxValidVersion (2)")
 	}
 }
 
-// Should produce invalid update value for MinTxBurnedFee
-func TestValidFieldValueMinTxBurnedFeeBad1(t *testing.T) {
-	fieldGood := "minTxBurnedFee"
-	valueBad := ""
-	ok := validFieldValue(fieldGood, valueBad)
-	if ok {
-		t.Fatal("Should not be ok")
-	}
-}
+func TestRawStorageUpdateMinAtomicSwapBurnedFee(t *testing.T) {
+	rs := &RawStorage{}
 
-// Should produce another invalid update value for MinTxBurnedFee
-func TestValidFieldValueMinTxBurnedFeeBad2(t *testing.T) {
-	fieldGood := "minTxBurnedFee"
-	valueBad := "-1000000000"
-	ok := validFieldValue(fieldGood, valueBad)
-	if ok {
-		t.Fatal("Should not be ok")
+	retMinASFee := rs.GetMinAtomicSwapBurnedFee()
+	if retMinASFee.Sign() != 0 {
+		t.Fatal("Incorrect MinAtomicSwapBurnedFee (1)")
 	}
-}
 
-// Should produce valid update value for TxValidVersion
-func TestValidFieldValueTxValidVersionGood(t *testing.T) {
-	fieldGood := "txValidVersion"
+	field := "minAtomicSwapBurnedFee"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if !errors.Is(err, ErrInvalidUpdateValue) {
+		t.Fatal("Should have raised ErrInvalidUpdateValue error")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue, ok := new(big.Int).SetString(valueGood, 10)
 	if !ok {
-		t.Fatal("Should be ok")
+		t.Fatal("SetString failed")
+	}
+	retMinASFee = rs.GetMinAtomicSwapBurnedFee()
+	if retMinASFee.Cmp(valueTrue) != 0 {
+		t.Fatal("Incorrect MinAtomicSwapBurnedFee (2)")
 	}
 }
 
-// Should produce valid update value for MinValueStoreBurnedFee
-func TestValidFieldValueMinValueStoreBurnedFeeGood(t *testing.T) {
-	fieldGood := "minValueStoreBurnedFee"
+func TestRawStorageUpdateAtomicSwapStopEpoch(t *testing.T) {
+	rs := &RawStorage{}
+
+	retAtomicSwapStopEpoch := rs.GetAtomicSwapValidStopEpoch()
+	if retAtomicSwapStopEpoch != 0 {
+		t.Fatal("Incorrect AtomicSwapValidStopEpoch (1)")
+	}
+
+	field := "atomicSwapValidStopEpoch"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asTrue := uint32(valueTrue64)
+	retAtomicSwapStopEpoch = rs.GetAtomicSwapValidStopEpoch()
+	if retAtomicSwapStopEpoch != asTrue {
+		t.Fatal("Incorrect AtomicSwapValidStopEpoch (2)")
 	}
 }
 
-// Should produce valid update value for ValueStoreTxValidVersion
-func TestValidFieldValueValueStoreTxValidVersionGood(t *testing.T) {
-	fieldGood := "valueStoreTxValidVersion"
-	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
-	}
-}
+func TestRawStorageUpdateDataStoreTxValidVersion(t *testing.T) {
+	rs := &RawStorage{}
 
-// Should produce valid update value for MinAtomicSwapBurnedFee
-func TestValidFieldValueMinAtomicSwapBurnedFeeGood(t *testing.T) {
-	fieldGood := "minAtomicSwapBurnedFee"
-	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	retDSTxValidVersion := rs.GetDataStoreTxValidVersion()
+	if retDSTxValidVersion != 0 {
+		t.Fatal("Incorrect DataStoreTxValidVersion (1)")
 	}
-}
 
-// Should produce valid update value for AtomicSwapValidStopEpoch
-func TestValidFieldValueAtomicSwapValidStopEpochGood(t *testing.T) {
-	fieldGood := "atomicSwapValidStopEpoch"
-	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	field := "dataStoreTxValidVersion"
+	valueBad1 := ""
+	err := rs.UpdateValue(field, valueBad1)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
 	}
-}
 
-// Should produce valid update value for DataStoreTxValidVersion
-func TestValidFieldValueDataStoreTxValidVersionGood(t *testing.T) {
-	fieldGood := "dataStoreTxValidVersion"
+	valueBad2 := "-1"
+	err = rs.UpdateValue(field, valueBad2)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
+	}
+
 	valueGood := "1000000000"
-	ok := validFieldValue(fieldGood, valueGood)
-	if !ok {
-		t.Fatal("Should be ok")
+	err = rs.UpdateValue(field, valueGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valueTrue64, err := strconv.ParseInt(valueGood, 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dsTxValidTrue := uint32(valueTrue64)
+	retDSTxValidVersion = rs.GetDataStoreTxValidVersion()
+	if retDSTxValidVersion != dsTxValidTrue {
+		t.Fatal("Incorrect DataStoreTxValidVersion (2)")
 	}
 }
-*/

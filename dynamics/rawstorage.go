@@ -65,21 +65,7 @@ func (rs *RawStorage) Copy() (*RawStorage, error) {
 }
 
 // UpdateValue updates the field with the appropriate value.
-// It checks the field and value are valid before updating.
-//
-// TODO: this actually needs to perform a proper update and not just
-// 		 unmarshal. This is because some of the other values may depend on
-//		 the new, updated value. Need to look at this more.
 func (rs *RawStorage) UpdateValue(field, value string) error {
-	// We set the corresponding value
-	err := rs.updateValue(field, value)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (rs *RawStorage) updateValue(field, value string) error {
 	switch field {
 	case "maxBytes":
 		// uint32
@@ -196,132 +182,10 @@ func (rs *RawStorage) updateValue(field, value string) error {
 		v := uint32(v64)
 		rs.SetDataStoreTxValidVersion(v)
 	default:
-		panic("invalid field")
-	}
-	return nil
-}
-
-/*
-// checkUpdateValue confirms that the field and value strings produce
-// a valid update for RawStorage.
-//
-// This only allows for updating one value at a time.
-func checkUpdateValue(field, value string) error {
-	ok := validFieldValue(field, value)
-	if !ok {
-		return ErrInvalidUpdateValue
-	}
-	jsonBytes := makeJSONBytes(field, value)
-	validJSON := json.Valid(jsonBytes)
-	if !validJSON {
 		return ErrInvalidUpdateValue
 	}
 	return nil
 }
-*/
-
-// makeJSONBytes returns the correct byte slice for a json field, value pair
-func makeJSONBytes(field, value string) []byte {
-	jsonBytes := []byte("{\"" + field + "\":" + value + "}")
-	return jsonBytes
-}
-
-/*
-// validFieldValue returns
-func validFieldValue(field, value string) bool {
-	fieldUint32 := "uint32"
-	fieldTimeDuration := "time.Duration"
-	fieldBigInt := "*big.Int"
-	var fieldType string
-
-	ok := true
-	switch field {
-	case "maxBytes":
-		// uint32
-		fieldType = fieldUint32
-	case "maxProposalSize":
-		// uint32
-		fieldType = fieldUint32
-	case "proposalStepTimeout":
-		// time.Duration
-		fieldType = fieldTimeDuration
-	case "preVoteStepTimeout":
-		// time.Duration
-		fieldType = fieldTimeDuration
-	case "preCommitStepTimeout":
-		// time.Duration
-		fieldType = fieldTimeDuration
-	case "deadBlockRoundNextRoundTimeout":
-		// time.Duration
-		fieldType = fieldTimeDuration
-	case "downloadTimeout":
-		// time.Duration
-		fieldType = fieldTimeDuration
-	case "srvrMsgTimeout":
-		// time.Duration
-		fieldType = fieldTimeDuration
-	case "msgTimeout":
-		// time.Duration
-		fieldType = fieldTimeDuration
-	case "minTxBurnedFee":
-		// *big.Int
-		fieldType = fieldBigInt
-	case "txValidVersion":
-		// uint32
-		fieldType = fieldUint32
-	case "minValueStoreBurnedFee":
-		// *big.Int
-		fieldType = fieldBigInt
-	case "valueStoreTxValidVersion":
-		// uint32
-		fieldType = fieldUint32
-	case "minAtomicSwapBurnedFee":
-		// *big.Int
-		fieldType = fieldBigInt
-	case "atomicSwapValidStopEpoch":
-		// uint32
-		fieldType = fieldUint32
-	case "dataStoreTxValidVersion":
-		// uint32
-		fieldType = fieldUint32
-	}
-
-	switch fieldType {
-	case fieldUint32:
-		_, err := strconv.ParseUint(value, 10, 32)
-		if err != nil {
-			ok = false
-			return ok
-		}
-		return ok
-	case fieldTimeDuration:
-		i, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			ok = false
-			return ok
-		}
-		if i < 0 {
-			ok = false
-			return ok
-		}
-		return ok
-	case fieldBigInt:
-		b, valid := new(big.Int).SetString(value, 10)
-		if !valid {
-			ok = false
-			return ok
-		}
-		if b.Sign() < 0 {
-			ok = false
-			return ok
-		}
-		return ok
-	default:
-		ok = false
-		return ok
-	}
-}
-*/
 
 // standardParameters initializes RawStorage with the standard (original)
 // parameters for the system.
@@ -421,15 +285,25 @@ func (rs *RawStorage) GetDownloadTimeout() time.Duration {
 
 // GetMinTxBurnedFee returns the minimun tx burned fee
 func (rs *RawStorage) GetMinTxBurnedFee() *big.Int {
+	if rs.MinTxBurnedFee == nil {
+		rs.MinTxBurnedFee = new(big.Int)
+	}
 	return rs.MinTxBurnedFee
 }
 
 // SetMinTxBurnedFee sets the minimun tx burned fee
-func (rs *RawStorage) SetMinTxBurnedFee(value *big.Int) {
+func (rs *RawStorage) SetMinTxBurnedFee(value *big.Int) error {
+	if value == nil {
+		return ErrInvalidValue
+	}
 	if rs.MinTxBurnedFee == nil {
 		rs.MinTxBurnedFee = new(big.Int)
 	}
+	if value.Sign() < 0 {
+		return ErrInvalidValue
+	}
 	rs.MinTxBurnedFee.Set(value)
+	return nil
 }
 
 // GetTxValidVersion returns the valid version of tx
@@ -444,15 +318,25 @@ func (rs *RawStorage) SetTxValidVersion(value uint32) {
 
 // GetMinValueStoreBurnedFee returns the minimun ValueStore burned fee
 func (rs *RawStorage) GetMinValueStoreBurnedFee() *big.Int {
+	if rs.MinValueStoreBurnedFee == nil {
+		rs.MinValueStoreBurnedFee = new(big.Int)
+	}
 	return rs.MinValueStoreBurnedFee
 }
 
 // SetMinValueStoreBurnedFee sets the minimun ValueStore burned fee
-func (rs *RawStorage) SetMinValueStoreBurnedFee(value *big.Int) {
+func (rs *RawStorage) SetMinValueStoreBurnedFee(value *big.Int) error {
+	if value == nil {
+		return ErrInvalidValue
+	}
 	if rs.MinValueStoreBurnedFee == nil {
 		rs.MinValueStoreBurnedFee = new(big.Int)
 	}
+	if value.Sign() < 0 {
+		return ErrInvalidValue
+	}
 	rs.MinValueStoreBurnedFee.Set(value)
+	return nil
 }
 
 // GetValueStoreTxValidVersion returns the valid version of ValueStore
@@ -467,15 +351,25 @@ func (rs *RawStorage) SetValueStoreTxValidVersion(value uint32) {
 
 // GetMinAtomicSwapBurnedFee returns the minimun AtomicSwap burned fee
 func (rs *RawStorage) GetMinAtomicSwapBurnedFee() *big.Int {
+	if rs.MinAtomicSwapBurnedFee == nil {
+		rs.MinAtomicSwapBurnedFee = new(big.Int)
+	}
 	return rs.MinAtomicSwapBurnedFee
 }
 
 // SetMinAtomicSwapBurnedFee sets the minimun AtomicSwap burned fee
-func (rs *RawStorage) SetMinAtomicSwapBurnedFee(value *big.Int) {
+func (rs *RawStorage) SetMinAtomicSwapBurnedFee(value *big.Int) error {
+	if value == nil {
+		return ErrInvalidValue
+	}
 	if rs.MinAtomicSwapBurnedFee == nil {
 		rs.MinAtomicSwapBurnedFee = new(big.Int)
 	}
+	if value.Sign() < 0 {
+		return ErrInvalidValue
+	}
 	rs.MinAtomicSwapBurnedFee.Set(value)
+	return nil
 }
 
 // GetAtomicSwapValidStopEpoch returns the valid version of AtomicSwap

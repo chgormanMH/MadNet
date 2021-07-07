@@ -24,4 +24,7 @@ var (
 	// ErrInvalidUpdateValue is an error which is returned when the data
 	// for updating rawStorage is invalid.
 	ErrInvalidUpdateValue = errors.New("invalid update value for storage")
+
+	// ErrInvalidValue is an error which is returned when the value is invalid.
+	ErrInvalidValue = errors.New("invalid value")
 )
