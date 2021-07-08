@@ -2,6 +2,7 @@ package dynamics
 
 import (
 	"errors"
+	"math/big"
 	"sync"
 	"time"
 
@@ -152,40 +153,131 @@ func (s *Storage) UpdateStorage() error {
 	return nil
 }
 
-// UpdateStorageValue ...
+// UpdateStorageValue updates the stored RawStorage values.
+//
+// There are a few cases that must be handled.
+// Throughout, we let E == epoch (from the function argument),
+// C == currentEpoch, and H == highestEpoch.
+// We have three possibilities:
+//
+//          E           C                               H
+//		|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+//
+//                      C               E               H
+//		|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+//
+//                      C                               H           E
+//		|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+//
+// Naturally, we also allow for E == C or E == H (and even C == H).
+//
+// When E <= H, then we need to update epochs starting with max(C, E).
+// In this case, we stop updating epochs at H.
+// Thus, we have minEpoch = max(C, E) and maxEpoch = H.
+// To update, we load RawStorage, update the value, and write RawStorage.
+// This begins at minEpoch and ends at maxEpoch.
+//
+// Otherwise, we have E > H. In this case, we set minEpoch = H+1
+// and maxEpoch = E. When updating epochs, no value will have been set,
+// so we load RawStorage from the previous epoch and save it
+// to the current value. When we reach maxEpoch (== epoch), we load
+// the previous epoch, update the value, and then write it.
 func (s *Storage) UpdateStorageValue(field, value string, epoch uint32) error {
 	select {
 	case <-s.startChan:
 	}
-	lowestEpoch := epoch
-	if lowestEpoch < s.currentEpoch {
-		lowestEpoch = s.currentEpoch
-	}
-	highestEpoch, err := s.database.GetHighestEpoch()
+
+	// First confirm (field, value) pair is valid;
+	// nothing is done if an invalid update is attempted.
+	rs := &RawStorage{}
+	err := rs.UpdateValue(field, value)
 	if err != nil {
+		utils.DebugTrace(s.logger, err)
 		return err
 	}
-	if epoch > highestEpoch {
-		// We now need to update highestEpoch to reflect this change
-		highestEpoch = epoch
+	rs = nil
+
+	// We now set the lowest epoch which we must change
+	var minEpoch uint32
+	var maxEpoch uint32
+	currentEpoch := s.currentEpoch
+	highestEpoch, err := s.database.GetHighestEpoch()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
 	}
-	for epochCurr := lowestEpoch; epochCurr <= highestEpoch; epochCurr++ {
-		rsCurr, err := s.database.GetRawStorage(epochCurr)
-		if err != nil {
-			return err
+	updateHighestEpoch := false
+	if epoch <= highestEpoch {
+		// minEpoch == max(epoch, currentEpoch)
+		minEpoch = epoch
+		if currentEpoch > epoch {
+			minEpoch = currentEpoch
 		}
-		err = rsCurr.UpdateValue(field, value)
-		if err != nil {
-			return err
+		maxEpoch = highestEpoch
+	} else {
+		// We now need to update highestEpoch to reflect this change
+		updateHighestEpoch = true
+		minEpoch = highestEpoch + 1
+		maxEpoch = epoch
+	}
+
+	for epochCurr := minEpoch; epochCurr <= maxEpoch; epochCurr++ {
+		rsCurr := &RawStorage{}
+		updateValue := true
+
+		if epochCurr > epoch {
+			// We load RawStorage, update value, and write RawStorage
+			rsCurr, err = s.database.GetRawStorage(epochCurr)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+		} else if epochCurr < epoch {
+			// Load RawStorage from previous epoch and write RawStorage
+			// to current epoch
+			rsCurr, err = s.database.GetRawStorage(epochCurr - 1)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			updateValue = false
+
+		} else if updateHighestEpoch {
+			// epochCurr == epoch and epoch > highestEpoch
+			rsCurr, err = s.database.GetRawStorage(epochCurr - 1)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+		} else {
+			// epochCurr == epoch and epoch <= highestEpoch
+			rsCurr, err = s.database.GetRawStorage(epochCurr)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+		}
+
+		if updateValue {
+			err = rsCurr.UpdateValue(field, value)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
 		}
 		err = s.database.SetRawStorage(epochCurr, rsCurr)
 		if err != nil {
+			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	}
-	err = s.database.SetHighestEpoch(highestEpoch)
-	if err != nil {
-		return err
+
+	if updateHighestEpoch {
+		err = s.database.SetHighestEpoch(epoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
 	}
 	return nil
 }
@@ -281,17 +373,6 @@ func (s *Storage) GetMaxBytes() uint32 {
 	return s.rawStorage.GetMaxBytes()
 }
 
-/*
-// SetMaxBytes sets the maximum allowed bytes
-func (s *Storage) SetMaxBytes(value uint32, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.MaxBytes = value
-	return nil
-}
-*/
-
 // GetMaxProposalSize returns the maximum size of bytes allowed in a proposal
 func (s *Storage) GetMaxProposalSize() uint32 {
 	select {
@@ -322,17 +403,6 @@ func (s *Storage) GetMsgTimeout() time.Duration {
 	return s.rawStorage.GetMsgTimeout()
 }
 
-/*
-// SetMsgTimeout sets the timeout to receive a message
-func (s *Storage) SetMsgTimeout(value time.Duration, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.MsgTimeout = value
-	return nil
-}
-*/
-
 // GetProposalStepTimeout returns the proposal step timeout
 func (s *Storage) GetProposalStepTimeout() time.Duration {
 	select {
@@ -342,17 +412,6 @@ func (s *Storage) GetProposalStepTimeout() time.Duration {
 	defer s.RUnlock()
 	return s.rawStorage.GetProposalStepTimeout()
 }
-
-/*
-// SetProposalStepTimeout sets the proposal step timeout
-func (s *Storage) SetProposalStepTimeout(value time.Duration, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.ProposalStepTimeout = value
-	return nil
-}
-*/
 
 // GetPreVoteStepTimeout returns the prevote step timeout
 func (s *Storage) GetPreVoteStepTimeout() time.Duration {
@@ -364,17 +423,6 @@ func (s *Storage) GetPreVoteStepTimeout() time.Duration {
 	return s.rawStorage.GetPreVoteStepTimeout()
 }
 
-/*
-// SetPreVoteStepTimeout sets the prevote step timeout
-func (s *Storage) SetPreVoteStepTimeout(value time.Duration, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.PreVoteStepTimeout = value
-	return nil
-}
-*/
-
 // GetPreCommitStepTimeout returns the precommit step timeout
 func (s *Storage) GetPreCommitStepTimeout() time.Duration {
 	select {
@@ -384,17 +432,6 @@ func (s *Storage) GetPreCommitStepTimeout() time.Duration {
 	defer s.RUnlock()
 	return s.rawStorage.GetPreCommitStepTimeout()
 }
-
-/*
-// SetPreCommitStepTimeout sets the precommit step timeout
-func (s *Storage) SetPreCommitStepTimeout(value time.Duration, epoch uint32) error {
-	panic("not implemented")
-	s.Lock()
-	defer s.Unlock()
-	s.PreCommitStepTimout = value
-	return nil
-}
-*/
 
 // GetDeadBlockRoundNextRoundTimeout returns the timeout required before
 // moving into the DeadBlockRound
@@ -415,4 +452,74 @@ func (s *Storage) GetDownloadTimeout() time.Duration {
 	s.RLock()
 	defer s.RUnlock()
 	return s.rawStorage.GetDownloadTimeout()
+}
+
+// GetMinTxBurnedFee returns the minimum transaction fee
+func (s *Storage) GetMinTxBurnedFee() *big.Int {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.rawStorage.GetMinTxBurnedFee()
+}
+
+// GetTxValidVersion returns the transaction valid version
+func (s *Storage) GetTxValidVersion() uint32 {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.rawStorage.GetTxValidVersion()
+}
+
+// GetMinValueStoreBurnedFee returns the minimum transaction fee for ValueStore
+func (s *Storage) GetMinValueStoreBurnedFee() *big.Int {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.rawStorage.GetMinValueStoreBurnedFee()
+}
+
+// GetValueStoreTxValidVersion returns the ValueStore valid version
+func (s *Storage) GetValueStoreTxValidVersion() uint32 {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.rawStorage.GetValueStoreTxValidVersion()
+}
+
+// GetMinAtomicSwapBurnedFee returns the minimum transaction fee for AtomicSwap
+func (s *Storage) GetMinAtomicSwapBurnedFee() *big.Int {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.rawStorage.GetMinAtomicSwapBurnedFee()
+}
+
+// GetAtomicSwapValidStopEpoch returns the last epoch at which AtomicSwap is valid
+func (s *Storage) GetAtomicSwapValidStopEpoch() uint32 {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.rawStorage.GetAtomicSwapValidStopEpoch()
+}
+
+// GetDataStoreTxValidVersion returns the DataStore valid version
+func (s *Storage) GetDataStoreTxValidVersion() uint32 {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.rawStorage.GetDataStoreTxValidVersion()
 }
