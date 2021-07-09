@@ -52,6 +52,25 @@ type Storage struct {
 	logger       *logrus.Logger
 }
 
+// update is the struct which holds updates for Storage/RawStorage.
+type update struct {
+	field string
+	value string
+	epoch uint32
+}
+
+// checkUpdateList confirms that all elements of the list are valid.
+func checkUpdateList(updateList []update) error {
+	rs := &RawStorage{}
+	for _, u := range updateList {
+		err := rs.UpdateValue(u.field, u.value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Init initializes the Storage structure.
 func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 	// initialize channel
@@ -136,12 +155,46 @@ func (s *Storage) Start() {
 	})
 }
 
-// CheckForUpdates looks for updates to system parameters
-func (s *Storage) CheckForUpdates() error {
+// LoadNextEpoch loads the next RawStorage value. If it does not exist,
+// we use the current RawStorage value. We also update currentEpoch.
+func (s *Storage) LoadNextEpoch() error {
 	select {
 	case <-s.startChan:
 	}
+	err := s.loadStorage(s.currentEpoch + 1)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	s.currentEpoch++
+
+	err = s.database.SetCurrentEpoch(s.currentEpoch)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	highestEpoch, err := s.database.GetHighestEpoch()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	if s.currentEpoch > highestEpoch {
+		// update highest epoch
+		err = s.database.SetHighestEpoch(s.currentEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+	}
 	return nil
+}
+
+// checkForUpdates looks for updates to system parameters
+func (s *Storage) checkForUpdates() ([]update, error) {
+	select {
+	case <-s.startChan:
+	}
+	return []update{}, nil
 }
 
 // UpdateStorage updates the database to include changes that must be made
@@ -150,10 +203,30 @@ func (s *Storage) UpdateStorage() error {
 	select {
 	case <-s.startChan:
 	}
+
+	updateList, err := s.checkForUpdates()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+
+	err = checkUpdateList(updateList)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+
+	for _, u := range updateList {
+		err := s.updateStorageValue(u.field, u.value, u.epoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+	}
 	return nil
 }
 
-// UpdateStorageValue updates the stored RawStorage values.
+// updateStorageValue updates the stored RawStorage values.
 //
 // There are a few cases that must be handled.
 // Throughout, we let E == epoch (from the function argument),
@@ -182,20 +255,10 @@ func (s *Storage) UpdateStorage() error {
 // so we load RawStorage from the previous epoch and save it
 // to the current value. When we reach maxEpoch (== epoch), we load
 // the previous epoch, update the value, and then write it.
-func (s *Storage) UpdateStorageValue(field, value string, epoch uint32) error {
+func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 	select {
 	case <-s.startChan:
 	}
-
-	// First confirm (field, value) pair is valid;
-	// nothing is done if an invalid update is attempted.
-	rs := &RawStorage{}
-	err := rs.UpdateValue(field, value)
-	if err != nil {
-		utils.DebugTrace(s.logger, err)
-		return err
-	}
-	rs = nil
 
 	// We now set the lowest epoch which we must change
 	var minEpoch uint32
@@ -215,7 +278,8 @@ func (s *Storage) UpdateStorageValue(field, value string, epoch uint32) error {
 		}
 		maxEpoch = highestEpoch
 	} else {
-		// We now need to update highestEpoch to reflect this change
+		// The epoch we need to update is beyond what we stored.
+		// We now need to update highestEpoch to reflect this change.
 		updateHighestEpoch = true
 		minEpoch = highestEpoch + 1
 		maxEpoch = epoch
@@ -282,18 +346,20 @@ func (s *Storage) UpdateStorageValue(field, value string, epoch uint32) error {
 	return nil
 }
 
-// LoadStorage updates RawStorage to the correct value
-// defined by the epoch.
-func (s *Storage) LoadStorage(epoch uint32) error {
+// loadStorage updates RawStorage to the correct value
+// defined by the epoch. It does this by searching for RawStorage at epoch.
+// If it does not exist, then it uses the current RawStorage value and stores
+// it in that location.
+func (s *Storage) loadStorage(epoch uint32) error {
 	select {
 	case <-s.startChan:
 	}
 	s.Lock()
 	defer s.Unlock()
 
-	// Check for any updates to parameters that have not been called;
+	// Check for and perform any updates to parameters that have not been called;
 	// if some exist, perform those updates.
-	err := s.CheckForUpdates()
+	err := s.UpdateStorage()
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
 		return err

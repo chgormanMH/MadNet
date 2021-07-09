@@ -3,6 +3,7 @@ package dynamics
 import (
 	"bytes"
 	"errors"
+	"strconv"
 	"testing"
 )
 
@@ -268,7 +269,8 @@ func TestStorageInit4(t *testing.T) {
 		t.Fatal("rawStorage values do not match")
 	}
 }
-func TestStorageStart(t *testing.T) {
+
+func TestStorageStartGood(t *testing.T) {
 	storageLogger := newLogger()
 	database := initializeDB()
 
@@ -377,6 +379,33 @@ func TestStorageInitialized(t *testing.T) {
 	}
 }
 
+func TestStorageCheckUpdateList(t *testing.T) {
+	fieldBad := "invalid"
+	valueBad := "invalid"
+	epochBad := uint32(0)
+	uBad := update{field: fieldBad, value: valueBad, epoch: epochBad}
+	ulBad := []update{uBad}
+	err := checkUpdateList(ulBad)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
+
+	fieldGood := "maxBytes"
+	valueGood := "1234567890"
+	epochGood := uint32(25519)
+	uGood := update{field: fieldGood, value: valueGood, epoch: epochGood}
+	ulGood := []update{uGood}
+	err = checkUpdateList(ulGood)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = checkUpdateList(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Test success of UpdateStorageInstance
 func TestStorageLoadStorage1(t *testing.T) {
 	s := initializeStorage()
@@ -389,7 +418,7 @@ func TestStorageLoadStorage1(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = s.LoadStorage(epoch)
+	err = s.loadStorage(epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +447,7 @@ func TestStorageLoadStorage2(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = s.LoadStorage(epoch)
+	err = s.loadStorage(epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +467,7 @@ func TestStorageLoadStorage3(t *testing.T) {
 	s.rawStorage = nil
 	// This should fail because we have an invalid rawStorage value
 	// and we are assuming we are able to use the current rawStorage value
-	err := s.LoadStorage(epoch)
+	err := s.loadStorage(epoch)
 	if err == nil {
 		t.Fatal("Should have raised error")
 	}
@@ -450,7 +479,7 @@ func TestStorageUpdateStorageValueBad(t *testing.T) {
 	epoch := uint32(25519)
 	field := "invalid"
 	value := ""
-	err := s.UpdateStorageValue(field, value, epoch)
+	err := s.updateStorageValue(field, value, epoch)
 	if err == nil {
 		t.Fatal("Should have raised error")
 	}
@@ -476,7 +505,7 @@ func TestStorageUpdateStorageValueGood1(t *testing.T) {
 	field := "maxBytes"
 	value := "1234567890"
 	epoch := uint32(5)
-	err = s.UpdateStorageValue(field, value, epoch)
+	err = s.updateStorageValue(field, value, epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,7 +571,7 @@ func TestStorageUpdateStorageValueGood2(t *testing.T) {
 	field := "maxBytes"
 	value := "1234567890"
 	epoch := uint32(15)
-	err = s.UpdateStorageValue(field, value, epoch)
+	err = s.updateStorageValue(field, value, epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -607,7 +636,7 @@ func TestStorageUpdateStorageValueGood3(t *testing.T) {
 	field := "maxBytes"
 	value := "1234567890"
 	epoch := uint32(1)
-	err := s.UpdateStorageValue(field, value, epoch)
+	err := s.updateStorageValue(field, value, epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -643,5 +672,126 @@ func TestStorageUpdateStorageValueGood3(t *testing.T) {
 	_, err = s.database.GetRawStorage(highestEpoch + 1)
 	if !errors.Is(err, ErrKeyNotPresent) {
 		t.Fatal("Should have raised ErrKeyNotPresent error")
+	}
+}
+
+func TestStorageLoadNextEpochGood1(t *testing.T) {
+	origCurrentEpoch := uint32(1)
+	origHighestEpoch := uint32(5)
+	// Initialize epochs to standardParameters
+	s := initializeStorageCE(origCurrentEpoch, origHighestEpoch)
+
+	// At each epoch, we set the value of MaxBytes to the epoch number
+	for e := origCurrentEpoch; e <= origHighestEpoch; e++ {
+		rsNew := &RawStorage{}
+		rsNew.standardParameters()
+		value := strconv.Itoa(int(e))
+		err := rsNew.UpdateValue("maxBytes", value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.database.SetRawStorage(e, rsNew)
+	}
+
+	retCE, err := s.database.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retCE != origCurrentEpoch {
+		t.Fatal("Invalid currentEpoch (1)")
+	}
+	if origCurrentEpoch != s.currentEpoch {
+		t.Fatal("Invalid currentEpoch (2)")
+	}
+	retHE, err := s.database.GetHighestEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retHE != origHighestEpoch {
+		t.Fatal("Invalid highestEpoch (1)")
+	}
+
+	for e := origCurrentEpoch; e <= origHighestEpoch; e++ {
+		retCE, err = s.database.GetCurrentEpoch()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if retCE != e {
+			t.Fatal("Invalid currentEpoch (3)")
+		}
+		if e != s.currentEpoch {
+			t.Fatal("Invalid currentEpoch (4)")
+		}
+		retHE, err = s.database.GetHighestEpoch()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if retHE != origHighestEpoch {
+			t.Fatal("Invalid highestEpoch (2)")
+		}
+		s.LoadNextEpoch()
+	}
+
+	// We are now at origHighestEpoch+1.
+	// Check that we have updated everything correctly.
+	retCE, err = s.database.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retCE != origHighestEpoch+1 {
+		t.Fatal("Invalid currentEpoch (5)")
+	}
+	if origHighestEpoch+1 != s.currentEpoch {
+		t.Fatal("Invalid currentEpoch (6)")
+	}
+	retHE, err = s.database.GetHighestEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retHE != origHighestEpoch+1 {
+		t.Fatal("Invalid highestEpoch (3)")
+	}
+
+	rsTrue := &RawStorage{}
+	rsTrue.standardParameters()
+	value := strconv.Itoa(int(origHighestEpoch))
+	err = rsTrue.UpdateValue("maxBytes", value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsTrueBytes, err := rsTrue.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We now check that the current RawStorage is correct.
+	// In this case, we should have the value of MaxBytes equal
+	// to origHighestEpoch.
+	rsCurr, err := s.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsCurrBytes, err := rsCurr.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rsCurrBytes, rsTrueBytes) {
+		t.Fatal("RawStorage values do not match")
+	}
+}
+
+func TestStorageLoadNextEpochBad(t *testing.T) {
+	s := initializeStorage()
+	epoch := uint32(10)
+	err := s.database.SetCurrentEpoch(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.currentEpoch = epoch
+	s.rawStorage = nil
+	// We should now get an error because we do not have a valid RawStorage value
+	err = s.LoadNextEpoch()
+	if err == nil {
+		t.Fatal("Should have raised error")
 	}
 }
