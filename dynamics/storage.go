@@ -59,20 +59,30 @@ type update struct {
 	epoch uint32
 }
 
-// checkUpdateList confirms that all elements of the list are valid.
-func checkUpdateList(updateList []update) error {
+// checkUpdate confirms the specified update is valid.
+// TODO: we should think about ensuring that updates occur within some finite
+//		 number of epochs (say 1000 epochs from currentEpoch) to protect
+//		 against malicious actors. It is not clear how exactly to do this.
+//		 It is also not clear what to do if system goes offline and then
+//		 needs to recover. If we missed updates, what should we do about that?
+func checkUpdate(field, value string, epoch uint32) error {
 	rs := &RawStorage{}
-	for _, u := range updateList {
-		err := rs.UpdateValue(u.field, u.value)
-		if err != nil {
-			return err
-		}
+	if epoch == 0 {
+		return ErrInvalidUpdateValue
+	}
+	err := rs.UpdateValue(field, value)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 // Init initializes the Storage structure.
+// TODO: we will need to worry about initialization when not starting
+// 		 from the beginning. May need to ability to call someone else.
 func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
+	s.Lock()
+	defer s.Unlock()
 	// initialize channel
 	s.startChan = make(chan struct{})
 
@@ -189,39 +199,23 @@ func (s *Storage) LoadNextEpoch() error {
 	return nil
 }
 
-// checkForUpdates looks for updates to system parameters
-func (s *Storage) checkForUpdates() ([]update, error) {
-	select {
-	case <-s.startChan:
-	}
-	return []update{}, nil
-}
-
 // UpdateStorage updates the database to include changes that must be made
 // to the database
-func (s *Storage) UpdateStorage() error {
+func (s *Storage) UpdateStorage(field, value string, epoch uint32) error {
 	select {
 	case <-s.startChan:
 	}
 
-	updateList, err := s.checkForUpdates()
+	err := checkUpdate(field, value, epoch)
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
 		return err
 	}
 
-	err = checkUpdateList(updateList)
+	err = s.updateStorageValue(field, value, epoch)
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
 		return err
-	}
-
-	for _, u := range updateList {
-		err := s.updateStorageValue(u.field, u.value, u.epoch)
-		if err != nil {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
 	}
 	return nil
 }
@@ -285,21 +279,21 @@ func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 		maxEpoch = epoch
 	}
 
-	for epochCurr := minEpoch; epochCurr <= maxEpoch; epochCurr++ {
+	for epochIter := minEpoch; epochIter <= maxEpoch; epochIter++ {
 		rsCurr := &RawStorage{}
 		updateValue := true
 
-		if epochCurr > epoch {
+		if epochIter > epoch {
 			// We load RawStorage, update value, and write RawStorage
-			rsCurr, err = s.database.GetRawStorage(epochCurr)
+			rsCurr, err = s.database.GetRawStorage(epochIter)
 			if err != nil {
 				utils.DebugTrace(s.logger, err)
 				return err
 			}
-		} else if epochCurr < epoch {
+		} else if epochIter < epoch {
 			// Load RawStorage from previous epoch and write RawStorage
 			// to current epoch
-			rsCurr, err = s.database.GetRawStorage(epochCurr - 1)
+			rsCurr, err = s.database.GetRawStorage(epochIter - 1)
 			if err != nil {
 				utils.DebugTrace(s.logger, err)
 				return err
@@ -307,15 +301,15 @@ func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 			updateValue = false
 
 		} else if updateHighestEpoch {
-			// epochCurr == epoch and epoch > highestEpoch
-			rsCurr, err = s.database.GetRawStorage(epochCurr - 1)
+			// epochIter == epoch and epoch > highestEpoch
+			rsCurr, err = s.database.GetRawStorage(epochIter - 1)
 			if err != nil {
 				utils.DebugTrace(s.logger, err)
 				return err
 			}
 		} else {
-			// epochCurr == epoch and epoch <= highestEpoch
-			rsCurr, err = s.database.GetRawStorage(epochCurr)
+			// epochIter == epoch and epoch <= highestEpoch
+			rsCurr, err = s.database.GetRawStorage(epochIter)
 			if err != nil {
 				utils.DebugTrace(s.logger, err)
 				return err
@@ -328,8 +322,15 @@ func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 				utils.DebugTrace(s.logger, err)
 				return err
 			}
+			if epochIter == currentEpoch {
+				s.rawStorage, err = rsCurr.Copy()
+				if err != nil {
+					utils.DebugTrace(s.logger, err)
+					return err
+				}
+			}
 		}
-		err = s.database.SetRawStorage(epochCurr, rsCurr)
+		err = s.database.SetRawStorage(epochIter, rsCurr)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
@@ -356,14 +357,6 @@ func (s *Storage) loadStorage(epoch uint32) error {
 	}
 	s.Lock()
 	defer s.Unlock()
-
-	// Check for and perform any updates to parameters that have not been called;
-	// if some exist, perform those updates.
-	err := s.UpdateStorage()
-	if err != nil {
-		utils.DebugTrace(s.logger, err)
-		return err
-	}
 
 	// Search for RawStorage for epoch at correct location
 	rs, err := s.database.GetRawStorage(epoch)

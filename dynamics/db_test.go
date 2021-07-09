@@ -31,6 +31,51 @@ func (m *mockRawDB) SetValue(key []byte, value []byte) error {
 	return nil
 }
 
+func (m *mockRawDB) DeleteValue(key []byte) error {
+	strKey := string(key)
+	_, ok := m.rawDB[strKey]
+	if !ok {
+		return ErrKeyNotPresent
+	}
+	delete(m.rawDB, strKey)
+	return nil
+}
+
+func TestMock(t *testing.T) {
+	key := []byte("Key")
+	value := []byte("Key")
+
+	m := &mockRawDB{}
+	m.rawDB = make(map[string]string)
+
+	_, err := m.GetValue(key)
+	if err == nil {
+		t.Fatal("Should have raised error (1)")
+	}
+
+	err = m.SetValue(key, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retValue, err := m.GetValue(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retValue, value) {
+		t.Fatal("values do not match")
+	}
+
+	err = m.DeleteValue(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.GetValue(key)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
+	}
+}
+
 func newLogger() *logrus.Logger {
 	logger := logrus.New()
 	return logger
