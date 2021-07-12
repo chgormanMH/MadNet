@@ -172,7 +172,23 @@ func TestGetSetRawStorage(t *testing.T) {
 
 	err = db.SetRawStorage(epoch, nil)
 	if err == nil {
-		t.Fatal("Should have raised error")
+		t.Fatal("Should have raised error (1)")
+	}
+
+	// Set invalid value and attempt retreive it;
+	// this should raise an error.
+	invalidBytes := []byte("Invalid bytes")
+	rsEpochKey, err := db.makeRawStorageKey(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.rawDB.SetValue(rsEpochKey, invalidBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.GetRawStorage(epoch)
+	if err == nil {
+		t.Fatal("Should have raised error (2)")
 	}
 }
 
@@ -241,9 +257,21 @@ func TestGetSetCurrentEpoch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if curEpoch != epoch {
-		t.Fatal("currentEpochs are not equal (2)")
+		t.Fatal("currentEpochs are not equal (3)")
 	}
 
+	// Set invalid data at current epoch location;
+	// attempting to retrieve should raise an error
+	ceKey := db.makeCurrentEpochKey()
+	invalidBytes := []byte("Invalid Bytes")
+	err = db.rawDB.SetValue(ceKey, invalidBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.GetCurrentEpoch()
+	if err == nil {
+		t.Fatal("Should have raised error (3)")
+	}
 }
 
 func TestMakeHighestEpochKey(t *testing.T) {
@@ -313,5 +341,18 @@ func TestGetSetHighestEpoch(t *testing.T) {
 	}
 	if highestEpoch != epoch {
 		t.Fatal("highestEpochs are not equal (3)")
+	}
+
+	// Set invalid data at highest epoch location;
+	// attempting to retrieve should raise an error
+	heKey := db.makeHighestEpochKey()
+	invalidBytes := []byte("Invalid Bytes")
+	err = db.rawDB.SetValue(heKey, invalidBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.GetHighestEpoch()
+	if err == nil {
+		t.Fatal("Should have raised error (3)")
 	}
 }

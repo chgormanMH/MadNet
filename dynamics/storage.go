@@ -35,28 +35,20 @@ type StorageGetInterface interface {
 	GetProposalStepTimeout() time.Duration
 	GetPreVoteStepTimeout() time.Duration
 	GetPreCommitStepTimout() time.Duration
-	DeadBlockRoundNextRoundTimeout() time.Duration
-	DownloadTimeout() time.Duration
-	SrvrMsgTimeout() time.Duration
-	MsgTimeout() time.Duration
+	GetDeadBlockRoundNextRoundTimeout() time.Duration
+	GetDownloadTimeout() time.Duration
+	GetSrvrMsgTimeout() time.Duration
+	GetMsgTimeout() time.Duration
 }
 
 // Storage is the struct which will implement the StorageGetInterface interface.
 type Storage struct {
 	sync.RWMutex
-	database     *Database
-	startChan    chan struct{}
-	startOnce    sync.Once
-	rawStorage   *RawStorage // change this out entirely on epoch boundaries
-	currentEpoch uint32
-	logger       *logrus.Logger
-}
-
-// update is the struct which holds updates for Storage/RawStorage.
-type update struct {
-	field string
-	value string
-	epoch uint32
+	database   *Database
+	startChan  chan struct{}
+	startOnce  sync.Once
+	rawStorage *RawStorage // change this out entirely on epoch boundaries
+	logger     *logrus.Logger
 }
 
 // checkUpdate confirms the specified update is valid.
@@ -103,22 +95,20 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 		// currentEpoch is not set;
 		// we load standard parameters
 		currentEpoch = 1
-		s.currentEpoch = currentEpoch
-		err = s.database.SetCurrentEpoch(s.currentEpoch)
+		err = s.database.SetCurrentEpoch(currentEpoch)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 		s.rawStorage.standardParameters()
-		err = s.database.SetRawStorage(s.currentEpoch, s.rawStorage)
+		err = s.database.SetRawStorage(currentEpoch, s.rawStorage)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	} else {
 		// No error
-		s.currentEpoch = currentEpoch
-		rs, err := s.database.GetRawStorage(s.currentEpoch)
+		rs, err := s.database.GetRawStorage(currentEpoch)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
@@ -163,40 +153,6 @@ func (s *Storage) Start() {
 	s.startOnce.Do(func() {
 		close(s.startChan)
 	})
-}
-
-// LoadNextEpoch loads the next RawStorage value. If it does not exist,
-// we use the current RawStorage value. We also update currentEpoch.
-func (s *Storage) LoadNextEpoch() error {
-	select {
-	case <-s.startChan:
-	}
-	err := s.loadStorage(s.currentEpoch + 1)
-	if err != nil {
-		utils.DebugTrace(s.logger, err)
-		return err
-	}
-	s.currentEpoch++
-
-	err = s.database.SetCurrentEpoch(s.currentEpoch)
-	if err != nil {
-		utils.DebugTrace(s.logger, err)
-		return err
-	}
-	highestEpoch, err := s.database.GetHighestEpoch()
-	if err != nil {
-		utils.DebugTrace(s.logger, err)
-		return err
-	}
-	if s.currentEpoch > highestEpoch {
-		// update highest epoch
-		err = s.database.SetHighestEpoch(s.currentEpoch)
-		if err != nil {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
-	}
-	return nil
 }
 
 // UpdateStorage updates the database to include changes that must be made
@@ -257,7 +213,11 @@ func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 	// We now set the lowest epoch which we must change
 	var minEpoch uint32
 	var maxEpoch uint32
-	currentEpoch := s.currentEpoch
+	currentEpoch, err := s.database.GetCurrentEpoch()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
 	highestEpoch, err := s.database.GetHighestEpoch()
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
@@ -347,11 +307,11 @@ func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 	return nil
 }
 
-// loadStorage updates RawStorage to the correct value
+// LoadStorage updates RawStorage to the correct value
 // defined by the epoch. It does this by searching for RawStorage at epoch.
 // If it does not exist, then it uses the current RawStorage value and stores
 // it in that location.
-func (s *Storage) loadStorage(epoch uint32) error {
+func (s *Storage) LoadStorage(epoch uint32) error {
 	select {
 	case <-s.startChan:
 	}
@@ -378,6 +338,12 @@ func (s *Storage) loadStorage(epoch uint32) error {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
+	}
+	// We now update currentEpoch to reflect these changes
+	err = s.database.SetCurrentEpoch(epoch)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
 	}
 	return nil
 }
@@ -421,6 +387,26 @@ immediately and update current to highest written.
 How this could happen in practice (missing stated update) I am not sure,
 but this is what could be done to make those changes.
 */
+
+// SetCurrentEpoch sets the current epoch
+func (s *Storage) SetCurrentEpoch(epoch uint32) error {
+	select {
+	case <-s.startChan:
+	}
+	s.Lock()
+	defer s.Unlock()
+	return s.database.SetCurrentEpoch(epoch)
+}
+
+// GetCurrentEpoch returns the current epoch
+func (s *Storage) GetCurrentEpoch() (uint32, error) {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	return s.database.GetCurrentEpoch()
+}
 
 // GetMaxBytes returns the maximum allowed bytes
 func (s *Storage) GetMaxBytes() uint32 {
