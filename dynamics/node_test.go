@@ -2,177 +2,8 @@ package dynamics
 
 import (
 	"bytes"
-	"errors"
 	"testing"
-
-	"github.com/MadBase/MadNet/constants"
-	"github.com/MadBase/MadNet/constants/dbprefix"
 )
-
-func TestNodeKeyMarshal(t *testing.T) {
-	nk := &NodeKey{}
-	_, err := nk.Marshal()
-	if err == nil {
-		t.Fatal("Should have raised error")
-	}
-	epoch := uint32(1)
-	nk, err = makeNodeKey(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(nk.prefix, dbprefix.PrefixStorageNodeKey()) {
-		t.Fatal("prefixes do not match")
-	}
-	if nk.epoch != 1 {
-		t.Fatal("epochs do not match")
-	}
-}
-
-func TestNodeLinkedListMakeKeys(t *testing.T) {
-	epoch := uint32(0)
-	_, err := makeNodeKey(epoch)
-	if !errors.Is(err, ErrZeroEpoch) {
-		t.Fatal("Should have returned error for zero epoch")
-	}
-
-	epoch = 1
-	nk, err := makeNodeKey(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if nk.epoch != epoch {
-		t.Fatal("epochs do not match")
-	}
-	if !bytes.Equal(nk.prefix, dbprefix.PrefixStorageNodeKey()) {
-		t.Fatal("prefixes do not match (1)")
-	}
-
-	llk := makeLinkedListKey()
-	if llk.epoch != 0 {
-		t.Fatal("epoch should be 0")
-	}
-	if !bytes.Equal(nk.prefix, dbprefix.PrefixStorageNodeKey()) {
-		t.Fatal("prefixes do not match (2)")
-	}
-}
-
-func TestLinkedListMarshal(t *testing.T) {
-	ll := &LinkedList{}
-	if ll.IsValid() {
-		t.Fatal("Should not have valid LinkedList")
-	}
-	_, err := ll.Marshal()
-	if err == nil {
-		t.Fatal("Should have raised error (1)")
-	}
-
-	invalidBytes := []byte{0, 1, 2, 3, 4}
-	err = ll.Unmarshal(invalidBytes)
-	if err == nil {
-		t.Fatal("Should have raised error (2)")
-	}
-
-	invalidBytes2 := make([]byte, 8)
-	err = ll.Unmarshal(invalidBytes2)
-	if err == nil {
-		t.Fatal("Should have raised error (3)")
-	}
-
-	v := []byte{255, 255, 255, 255, 0, 0, 0, 1}
-	err = ll.Unmarshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ll.epochLastUpdated != constants.MaxUint32 {
-		t.Fatal("Invalid LinkedList (1)")
-	}
-	if ll.currentEpoch != 1 {
-		t.Fatal("Invalid LinkedList (2)")
-	}
-}
-
-func TestLinkedListGetSet(t *testing.T) {
-	ll := &LinkedList{}
-	err := ll.SetEpochLastUpdated(0)
-	if err == nil {
-		t.Fatal("Should have raised error (1)")
-	}
-	err = ll.SetCurrentEpoch(0)
-	if err == nil {
-		t.Fatal("Should have raised error (2)")
-	}
-
-	elu := uint32(123456)
-	err = ll.SetEpochLastUpdated(elu)
-	if err != nil {
-		t.Fatal(err)
-	}
-	retElu := ll.GetEpochLastUpdated()
-	if retElu != elu {
-		t.Fatal("Invalid EpochLastUpdated")
-	}
-
-	ce := uint32(25519)
-	err = ll.SetCurrentEpoch(ce)
-	if err != nil {
-		t.Fatal(err)
-	}
-	retCe := ll.GetCurrentEpoch()
-	if retCe != ce {
-		t.Fatal("Invalid CurrentEpoch")
-	}
-
-	if !ll.IsValid() {
-		t.Fatal("LinkedList should be valid")
-	}
-}
-
-func TestCreateLinkedList(t *testing.T) {
-	epoch := uint32(0)
-	_, _, err := CreateLinkedList(epoch, nil)
-	if err == nil {
-		t.Fatal("Should have raised error (1)")
-	}
-
-	epoch = 1
-	_, _, err = CreateLinkedList(epoch, nil)
-	if err == nil {
-		t.Fatal("Should have raised error (2)")
-	}
-
-	rs := &RawStorage{}
-	rs.standardParameters()
-	node, linkedlist, err := CreateLinkedList(epoch, rs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if node.thisEpoch != epoch {
-		t.Fatal("invalid thisEpoch")
-	}
-	if node.prevEpoch != epoch {
-		t.Fatal("invalid prevEpoch")
-	}
-	if node.nextEpoch != epoch {
-		t.Fatal("invalid nextEpoch")
-	}
-	if linkedlist.epochLastUpdated != epoch {
-		t.Fatal("invalid epochLastUpdated")
-	}
-
-	err = linkedlist.SetCurrentEpoch(0)
-	if err == nil {
-		t.Fatal("Should have raised error")
-	}
-
-	epoch = 2
-	err = linkedlist.SetCurrentEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if linkedlist.currentEpoch != epoch {
-		t.Fatal("invalid currentEpoch")
-	}
-}
 
 func TestNodeMarshal(t *testing.T) {
 	node := &Node{}
@@ -229,6 +60,13 @@ func TestNodeMarshal(t *testing.T) {
 	err = node.Unmarshal(v)
 	if err == nil {
 		t.Fatal("Should have raised error (3)")
+	}
+
+	v = make([]byte, 12)
+	v = append(v, rsBytes...)
+	err = node.Unmarshal(v)
+	if err == nil {
+		t.Fatal("Should have raised error (4)")
 	}
 }
 
@@ -319,6 +157,47 @@ func TestNodeIsPreValid(t *testing.T) {
 	}
 }
 
+func TestNodeIsHead(t *testing.T) {
+	node := &Node{}
+	if node.IsHead() {
+		t.Fatal("Node invalid; should be false")
+	}
+
+	node.prevEpoch = 1
+	node.thisEpoch = 1
+	node.nextEpoch = 1
+	node.rawStorage = &RawStorage{}
+	if !node.IsHead() {
+		t.Fatal("Should be Head")
+	}
+
+	node.nextEpoch = 2
+	if node.IsHead() {
+		t.Fatal("Should not be Head")
+	}
+}
+
+func TestNodeIsTail(t *testing.T) {
+	node := &Node{}
+	if node.IsTail() {
+		t.Fatal("Node invalid; should be false")
+	}
+
+	node.prevEpoch = 1
+	node.thisEpoch = 1
+	node.nextEpoch = 1
+	node.rawStorage = &RawStorage{}
+	if !node.IsTail() {
+		t.Fatal("Should be Tail")
+	}
+
+	node.thisEpoch = 2
+	node.nextEpoch = 2
+	if node.IsTail() {
+		t.Fatal("Should not be Tail")
+	}
+}
+
 // SetNode with prevNode at Head
 func TestNodeSetEpochsGood1(t *testing.T) {
 	rs := &RawStorage{}
@@ -339,68 +218,8 @@ func TestNodeSetEpochsGood1(t *testing.T) {
 	}
 	rsNew.MaxBytes = 1234567890
 	first := uint32(1)
-	last := uint32(123456789)
-	prevEpoch := uint32(257)
-	prevNode := &Node{
-		prevEpoch:  first,
-		thisEpoch:  prevEpoch,
-		nextEpoch:  last,
-		rawStorage: rsNew,
-	}
-	if !prevNode.IsValid() {
-		t.Fatal("prevNode should be Valid")
-	}
-	if prevNode.thisEpoch >= node.thisEpoch {
-		t.Fatal("Should have prevNode.thisEpoch < node.thisEpoch")
-	}
-	err = node.SetEpochs(prevNode, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Now need to confirm all epochs are good.
-	if prevNode.prevEpoch != first {
-		t.Fatal("prevNode.prevEpoch is incorrect")
-	}
-	if prevNode.thisEpoch != prevEpoch {
-		t.Fatal("prevNode.thisEpoch is incorrect")
-	}
-	if prevNode.nextEpoch != nodeEpoch {
-		t.Fatal("prevNode.nextEpoch is incorrect; it does not point to new nodeEpoch")
-	}
-	if node.prevEpoch != prevEpoch {
-		t.Fatal("prevNode.prevEpoch is incorrect; it does not equal prevEpoch")
-	}
-	if node.thisEpoch != nodeEpoch {
-		t.Fatal("node.thisEpoch is incorrect")
-	}
-	if node.nextEpoch != last {
-		t.Fatal("node.nextEpoch is incorrect; it does not point to last")
-	}
-}
-
-// SetNode with prevNode at not at Head
-func TestNodeSetEpochsGood2(t *testing.T) {
-	rs := &RawStorage{}
-	rs.standardParameters()
-	nodeEpoch := uint32(25519)
-	node := &Node{
-		prevEpoch:  0,
-		thisEpoch:  nodeEpoch,
-		nextEpoch:  0,
-		rawStorage: rs,
-	}
-	if !node.IsPreValid() {
-		t.Fatal("node should be preValid")
-	}
-	rsNew, err := rs.Copy()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rsNew.MaxBytes = 1234567890
-	first := uint32(1)
-	last := uint32(1)
-	prevEpoch := uint32(1)
+	last := uint32(257)
+	prevEpoch := last
 	prevNode := &Node{
 		prevEpoch:  first,
 		thisEpoch:  prevEpoch,
@@ -435,12 +254,12 @@ func TestNodeSetEpochsGood2(t *testing.T) {
 		t.Fatal("node.thisEpoch is incorrect")
 	}
 	if node.nextEpoch != nodeEpoch {
-		t.Fatal("node.nextEpoch is incorrect; it does not point to last")
+		t.Fatal("node.nextEpoch is incorrect; it does not point to self")
 	}
 }
 
 // SetNode with nextNode at Tail
-func TestNodeSetEpochsGood3(t *testing.T) {
+func TestNodeSetEpochsGood2(t *testing.T) {
 	rs := &RawStorage{}
 	rs.standardParameters()
 	nodeEpoch := uint32(1)
@@ -496,6 +315,92 @@ func TestNodeSetEpochsGood3(t *testing.T) {
 	}
 	if nextNode.nextEpoch != last {
 		t.Fatal("nextNode.nextEpoch is incorrect; it does not point to last")
+	}
+}
+
+// SetNode in between prevNode and nextNode
+func TestNodeSetEpochsGood3(t *testing.T) {
+	rs := &RawStorage{}
+	rs.standardParameters()
+	nodeEpoch := uint32(25519)
+	node := &Node{
+		prevEpoch:  0,
+		thisEpoch:  nodeEpoch,
+		nextEpoch:  0,
+		rawStorage: rs,
+	}
+	if !node.IsPreValid() {
+		t.Fatal("node should be preValid")
+	}
+
+	rsNew, err := rs.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsNew.MaxBytes = 1234567890
+
+	first := uint32(1)
+	last := uint32(1234567890)
+	prevNode := &Node{
+		prevEpoch:  first,
+		thisEpoch:  first,
+		nextEpoch:  last,
+		rawStorage: rsNew,
+	}
+	if !prevNode.IsValid() {
+		t.Fatal("prevNode should be Valid")
+	}
+	if node.thisEpoch < prevNode.thisEpoch {
+		t.Fatal("Should have node.thisEpoch < nextNode.thisEpoch")
+	}
+
+	nextNode := &Node{
+		prevEpoch:  first,
+		thisEpoch:  last,
+		nextEpoch:  last,
+		rawStorage: rsNew,
+	}
+	if !nextNode.IsValid() {
+		t.Fatal("nextNode should be Valid")
+	}
+	if node.thisEpoch >= nextNode.thisEpoch {
+		t.Fatal("Should have node.thisEpoch < nextNode.thisEpoch")
+	}
+
+	err = node.SetEpochs(prevNode, nextNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now need to confirm all epochs are good.
+	if prevNode.prevEpoch != first {
+		t.Fatal("nextNode.prevEpoch is incorrect")
+	}
+	if prevNode.thisEpoch != first {
+		t.Fatal("nextNode.thisEpoch is incorrect")
+	}
+	if prevNode.nextEpoch != nodeEpoch {
+		t.Fatal("nextNode.nextEpoch is incorrect")
+	}
+
+	if node.prevEpoch != first {
+		t.Fatal("node.prevEpoch is incorrect")
+	}
+	if node.thisEpoch != nodeEpoch {
+		t.Fatal("node.thisEpoch is incorrect")
+	}
+	if node.nextEpoch != last {
+		t.Fatal("node.nextEpoch is incorrect")
+	}
+
+	if nextNode.prevEpoch != nodeEpoch {
+		t.Fatal("nextNode.prevEpoch is incorrect")
+	}
+	if nextNode.thisEpoch != last {
+		t.Fatal("nextNode.thisEpoch is incorrect")
+	}
+	if nextNode.nextEpoch != last {
+		t.Fatal("nextNode.nextEpoch is incorrect")
 	}
 }
 

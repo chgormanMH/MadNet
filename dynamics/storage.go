@@ -98,6 +98,11 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 		if err != nil {
 			return err
 		}
+		if !node.IsHead() || !node.IsTail() {
+			// Something is very wrong; initial node should be head and tail
+			utils.DebugTrace(s.logger, ErrInvalidNode)
+			return ErrInvalidNode
+		}
 		err = s.database.SetLinkedList(linkedList)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
@@ -115,6 +120,17 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 		}
 	} else {
 		// No error
+		elu := linkedList.GetEpochLastUpdated()
+		eluNode, err := s.database.GetNode(elu)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		if !eluNode.IsHead() {
+			// Something is very wrong; eluNode should be head
+			utils.DebugTrace(s.logger, ErrInvalidNode)
+			return ErrInvalidNode
+		}
 		currentEpoch = linkedList.GetCurrentEpoch()
 		rs, err := s.loadStorage(currentEpoch)
 		if err != nil {
@@ -159,9 +175,7 @@ func (s *Storage) UpdateStorage(field, value string, epoch uint32) error {
 	}
 	return nil
 }
-*/
 
-/*
 // updateStorageValue updates the stored RawStorage values.
 //
 // There are a few cases that must be handled.
@@ -377,6 +391,7 @@ func (s *Storage) addNode(node *Node) error {
 		return ErrInvalid
 	}
 
+	// Get LinkedList and Head
 	ll, err := s.database.GetLinkedList()
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
@@ -389,74 +404,171 @@ func (s *Storage) addNode(node *Node) error {
 		return err
 	}
 
+	if node.thisEpoch > currentNode.thisEpoch {
+		// node to be added is strictly ahead of ELU
+		err = s.addNodeHead(node, currentNode)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		return nil
+	}
+
+	if node.thisEpoch == currentNode.thisEpoch {
+		// Node is already present; raise error
+		return ErrInvalid
+	}
+
+	if currentNode.IsTail() {
+		// We are at the end of the LinkedList
+		// We need to add node before currentNode
+		err = s.addNodeTail(node, currentNode)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		return nil
+	}
+
+	prevNode := &Node{}
+
 	// Loop backwards through the LinkedList
 	for {
-		if node.thisEpoch > currentNode.thisEpoch {
-			// We check if currentNode is at head; if yes, then we need to update
-			// This must happen before SetEpochs because SetEpochs modifies nodes!
-			makeNewHead := currentNode.IsHead()
-			// We need to add node after currentNode
-			err = node.SetEpochs(currentNode, nil)
+		// Get previous node
+		prevNode, err = s.database.GetNode(currentNode.prevEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		if prevNode.thisEpoch < node.thisEpoch && node.thisEpoch < currentNode.thisEpoch {
+			// We need to add node in between prevNode and currentNode
+			err = s.addNodeSplit(node, prevNode, currentNode)
 			if err != nil {
 				utils.DebugTrace(s.logger, err)
 				return err
-			}
-			// Store the nodes after changes have been made
-			err = s.database.SetNode(currentNode)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-			err = s.database.SetNode(node)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-			if makeNewHead {
-				// We need to update EpochLastUpdated
-				err = ll.SetEpochLastUpdated(node.thisEpoch)
-				if err != nil {
-					utils.DebugTrace(s.logger, err)
-					return err
-				}
-				err = s.database.SetLinkedList(ll)
-				if err != nil {
-					utils.DebugTrace(s.logger, err)
-					return err
-				}
 			}
 			return nil
 		}
-		if node.thisEpoch == currentNode.thisEpoch {
+		if node.thisEpoch == prevNode.thisEpoch {
 			// Node is already present; raise error
 			return ErrInvalid
 		}
-		if currentNode.IsTail() {
-			// We need to add node before currentNode
-			err = node.SetEpochs(nil, currentNode)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-			err = s.database.SetNode(currentNode)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-			err = s.database.SetNode(node)
+		if prevNode.IsTail() {
+			err = s.addNodeTail(node, prevNode)
 			if err != nil {
 				utils.DebugTrace(s.logger, err)
 				return err
 			}
 			return nil
 		}
-		prevEpoch := currentNode.prevEpoch
-		currentNode, err = s.database.GetNode(prevEpoch)
+		currentNode, err = prevNode.Copy()
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	}
+}
+
+func (s *Storage) addNodeHead(node, headNode *Node) error {
+	if !node.IsPreValid() || !headNode.IsValid() {
+		return ErrInvalid
+	}
+	if !headNode.IsHead() || node.thisEpoch <= headNode.thisEpoch {
+		// We require headNode to be head and node.thisEpoch < headNode.thisEpoch
+		return ErrInvalid
+	}
+	err := node.SetEpochs(headNode, nil)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	// Store the nodes after changes have been made
+	err = s.database.SetNode(headNode)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	err = s.database.SetNode(node)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+
+	// Update EpochLastUpdated
+	ll, err := s.database.GetLinkedList()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	// We need to update EpochLastUpdated
+	err = ll.SetEpochLastUpdated(node.thisEpoch)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	err = s.database.SetLinkedList(ll)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	return nil
+}
+
+func (s *Storage) addNodeSplit(node, prevNode, nextNode *Node) error {
+	if !node.IsPreValid() || !prevNode.IsValid() || !nextNode.IsValid() {
+		return ErrInvalid
+	}
+	if (prevNode.thisEpoch >= node.thisEpoch) || (node.thisEpoch >= nextNode.thisEpoch) {
+		return ErrInvalid
+	}
+	err := node.SetEpochs(prevNode, nextNode)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	// Store the nodes after changes have been made
+	err = s.database.SetNode(prevNode)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	err = s.database.SetNode(nextNode)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	err = s.database.SetNode(node)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	return nil
+}
+
+func (s *Storage) addNodeTail(node, tailNode *Node) error {
+	if !node.IsPreValid() || !tailNode.IsValid() {
+		return ErrInvalid
+	}
+	if !tailNode.IsTail() || node.thisEpoch >= tailNode.thisEpoch {
+		// We require tailNode to be tail and node.thisEpoch < tailNode.thisEpoch
+		return ErrInvalid
+	}
+	err := node.SetEpochs(nil, tailNode)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	err = s.database.SetNode(tailNode)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	err = s.database.SetNode(node)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	return nil
 }
 
 /*
