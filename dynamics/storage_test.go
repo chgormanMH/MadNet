@@ -19,48 +19,34 @@ func initializeStorage() *Storage {
 	return s
 }
 
-func initializeStorageCE(currentEpoch, highestEpoch uint32) *Storage {
-	if currentEpoch > highestEpoch {
-		panic("Cannot have currentEpoch > highestEpoch")
-	}
-	s := initializeStorage()
+func initializeStorageCE(currentEpoch uint32) *Storage {
+	storageLogger := newLogger()
+	database := initializeDB()
 
-	// Initialize RawStorage to standardParameters between currentEpoch and highestEpoch
-	rsStandard := &RawStorage{}
-	rsStandard.standardParameters()
-	for epochCurr := currentEpoch; epochCurr <= highestEpoch; epochCurr++ {
-		err := s.database.SetRawStorage(epochCurr, rsStandard)
-		if err != nil {
-			panic(err)
-		}
-	}
-	err := s.database.SetCurrentEpoch(currentEpoch)
+	// Initialize database
+	rs := &RawStorage{}
+	rs.standardParameters()
+
+	// Prepare LinkedList
+	node, ll, err := CreateLinkedList(currentEpoch, rs)
 	if err != nil {
 		panic(err)
 	}
-	err = s.database.SetHighestEpoch(highestEpoch)
+	err = database.SetNode(node)
 	if err != nil {
 		panic(err)
 	}
-	rsStandardBytes, err := rsStandard.Marshal()
+	err = database.SetLinkedList(ll)
 	if err != nil {
 		panic(err)
 	}
 
-	// Now to check
-	for epochCurr := currentEpoch; epochCurr <= highestEpoch; epochCurr++ {
-		rs, err := s.database.GetRawStorage(epochCurr)
-		if err != nil {
-			panic(err)
-		}
-		rsBytes, err := rs.Marshal()
-		if err != nil {
-			panic(err)
-		}
-		if !bytes.Equal(rsBytes, rsStandardBytes) {
-			panic("RawStorage values do not match")
-		}
+	s := &Storage{}
+	err = s.Init(database, storageLogger)
+	if err != nil {
+		panic(err)
 	}
+	s.Start()
 	return s
 }
 
@@ -74,23 +60,15 @@ func TestStorageInit1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.Start()
 
 	// Check currentEpoch == 1 (in the database)
-	currentEpoch, err := s.database.GetCurrentEpoch()
+	currentEpoch, err := s.GetCurrentEpoch()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if currentEpoch != 1 {
 		t.Fatal("invalid currentEpoch: does not match current value")
-	}
-
-	// Check highestEpoch == 1 (in database)
-	highestEpoch, err := s.database.GetHighestEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if highestEpoch != 1 {
-		t.Fatal("invalid highestEpoch: should be 1")
 	}
 
 	rs := &RawStorage{}
@@ -110,21 +88,26 @@ func TestStorageInit1(t *testing.T) {
 	}
 }
 
-// Test Storage Init with database initialized for currentEpoch
-// and associated rawStorage, but not highestEpoch
+// Test Storage Init with database initialized
 func TestStorageInit2(t *testing.T) {
 	storageLogger := newLogger()
 	database := initializeDB()
 
 	// Initialize database
 	epoch := uint32(25519)
-	err := database.SetCurrentEpoch(epoch)
+	rsTrue := &RawStorage{}
+	rsTrue.standardParameters()
+
+	// Prepare LinkedList
+	node, ll, err := CreateLinkedList(epoch, rsTrue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rsTrue := &RawStorage{}
-	rsTrue.standardParameters()
-	err = database.SetRawStorage(epoch, rsTrue)
+	err = database.SetNode(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = database.SetLinkedList(ll)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,23 +117,15 @@ func TestStorageInit2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.Start()
 
 	// Ensure currentEpoch matches value from database
-	currentEpoch, err := s.database.GetCurrentEpoch()
+	currentEpoch, err := s.GetCurrentEpoch()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if currentEpoch != epoch {
 		t.Fatal("invalid currentEpoch: does not match current value")
-	}
-
-	// Ensure highestEpoch is now set to epoch
-	highestEpoch, err := s.database.GetHighestEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if highestEpoch != epoch {
-		t.Fatal("invalid highestEpoch: should match epoch variable")
 	}
 
 	rs := &RawStorage{}
@@ -176,11 +151,15 @@ func TestStorageInit3(t *testing.T) {
 	storageLogger := newLogger()
 	database := initializeDB()
 
-	// Initialize database with current epoch but no rawStorage;
+	// Incorrectly initialize database;
 	// this should raise an error during initialization
-	// when running GetRawStorage.
-	epoch := uint32(25519)
-	err := database.SetCurrentEpoch(epoch)
+	// when running loadStorage.
+	epoch := uint32(1)
+	ll := &LinkedList{
+		epochLastUpdated: epoch,
+		currentEpoch:     epoch,
+	}
+	err := database.SetLinkedList(ll)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,68 +168,6 @@ func TestStorageInit3(t *testing.T) {
 	err = s.Init(database, storageLogger)
 	if err == nil {
 		t.Fatal("Should have raised error")
-	}
-}
-
-// Test Storage Init with database initialized again;
-// currentEpoch is set with associated rawStorage, but highestEpoch
-// is invalid (highestEpoch < currentEpoch).
-func TestStorageInit4(t *testing.T) {
-	storageLogger := newLogger()
-	database := initializeDB()
-
-	// Initialize database
-	epoch := uint32(25519)
-	err := database.SetCurrentEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = database.SetHighestEpoch(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rsTrue := &RawStorage{}
-	rsTrue.standardParameters()
-	err = database.SetRawStorage(epoch, rsTrue)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	s := &Storage{}
-	err = s.Init(database, storageLogger)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	currentEpoch, err := s.database.GetCurrentEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if currentEpoch != epoch {
-		t.Fatal("invalid currentEpoch: does not match current value")
-	}
-
-	highestEpoch, err := s.database.GetHighestEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if highestEpoch != epoch {
-		t.Fatal("invalid highestEpoch: should match epoch variable")
-	}
-
-	rs := &RawStorage{}
-	rs.standardParameters()
-	rsBytes, err := rs.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	storageRSBytes, err := s.rawStorage.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(rsBytes, storageRSBytes) {
-		t.Fatal("rawStorage values do not match")
 	}
 }
 
@@ -413,16 +330,51 @@ func TestStorageLoadStorage1(t *testing.T) {
 
 // Test success of UpdateStorageInstance again
 func TestStorageLoadStorage2(t *testing.T) {
-	s := initializeStorage()
 	epoch := uint32(25519)
-	err := s.database.SetRawStorage(epoch, s.rawStorage)
+	s := initializeStorageCE(epoch)
+	// We attempt to load an epoch for which we do not have data for;
+	// this should raise an error.
+	err := s.LoadStorage(1)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
+}
+
+// Test success of UpdateStorageInstance again
+func TestStorageLoadStorage3(t *testing.T) {
+	epoch := uint32(1)
+	s := initializeStorageCE(epoch)
+	rs := &RawStorage{}
+	rs.standardParameters()
+	rsBytes, err := rs.Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rsTrue := &RawStorage{}
-	rsTrue.standardParameters()
-	rsTrueBytes, err := rsTrue.Marshal()
+	newMaxBytes := uint32(12345)
+	rsNew := &RawStorage{}
+	rsNew.standardParameters()
+	rsNew.MaxBytes = newMaxBytes
+	newEpoch := uint32(10)
+	newNode := &Node{
+		thisEpoch:  newEpoch,
+		rawStorage: rsNew,
+	}
+	err = s.addNode(newNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newMaxBytes2 := uint32(123456)
+	rsNew2 := &RawStorage{}
+	rsNew2.standardParameters()
+	rsNew2.MaxBytes = newMaxBytes2
+	newEpoch2 := uint32(100)
+	newNode2 := &Node{
+		thisEpoch:  newEpoch2,
+		rawStorage: rsNew2,
+	}
+	err = s.addNode(newNode2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,15 +383,360 @@ func TestStorageLoadStorage2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rsBytes, err := s.rawStorage.Marshal()
+	retRS, err := s.rawStorage.Copy()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(rsBytes, rsTrueBytes) {
-		t.Fatal("rawStorage values do not match")
+	retRSBytes, err := retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsBytes) {
+		t.Fatal("invalid rawStorage")
 	}
 }
 
+func TestStorageSetGetCurrentEpoch1(t *testing.T) {
+	epoch := uint32(1)
+	s := initializeStorageCE(epoch)
+	retCE, err := s.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retCE != epoch {
+		t.Fatal("Invalid current epoch (1)")
+	}
+
+	newEpoch := uint32(25519)
+	err = s.SetCurrentEpoch(newEpoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retCE, err = s.GetCurrentEpoch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retCE != newEpoch {
+		t.Fatal("Invalid current epoch (2)")
+	}
+}
+
+func TestStorageSetGetCurrentEpoch2(t *testing.T) {
+	s := initializeStorage()
+	// Should raise error for attempting to set current epoch to 0
+	badEpoch := uint32(0)
+	err := s.SetCurrentEpoch(badEpoch)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
+}
+
+func TestStorageAddNodeGood1(t *testing.T) {
+	origEpoch := uint32(1)
+	s := initializeStorageCE(origEpoch)
+	rs := &RawStorage{}
+	rs.standardParameters()
+	rsStandardBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	newMaxBytes := uint32(12345)
+	rs.MaxBytes = newMaxBytes
+	epoch := uint32(10)
+	newNode := &Node{
+		prevEpoch:  0,
+		thisEpoch:  epoch,
+		nextEpoch:  0,
+		rawStorage: rs,
+	}
+	err = s.addNode(newNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsNewBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check everything
+	origNode, err := s.database.GetNode(origEpoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if origNode.prevEpoch != origEpoch {
+		t.Fatal("origNode.prevEpoch is invalid")
+	}
+	if origNode.thisEpoch != origEpoch {
+		t.Fatal("origNode.thisEpoch is invalid")
+	}
+	if origNode.nextEpoch != epoch {
+		t.Fatal("origNode.nextEpoch is invalid")
+	}
+	retRS, err := origNode.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retRSBytes, err := retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsStandardBytes) {
+		t.Fatal("invalid RawStorage")
+	}
+
+	addedNode, err := s.database.GetNode(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addedNode.prevEpoch != origEpoch {
+		t.Fatal("addedNode.prevEpoch is invalid")
+	}
+	if addedNode.thisEpoch != epoch {
+		t.Fatal("addedNode.thisEpoch is invalid")
+	}
+	if addedNode.nextEpoch != epoch {
+		t.Fatal("addedNode.nextEpoch is invalid")
+	}
+	retRS, err = addedNode.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retRSBytes, err = retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsNewBytes) {
+		t.Fatal("invalid RawStorage (2)")
+	}
+}
+
+func TestStorageAddNodeGood2(t *testing.T) {
+	origEpoch := uint32(10)
+	s := initializeStorageCE(origEpoch)
+	rs := &RawStorage{}
+	rs.standardParameters()
+	rsStandardBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	newMaxBytes := uint32(12345)
+	rs.MaxBytes = newMaxBytes
+	rsNewBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	epoch := uint32(1)
+	newNode := &Node{
+		prevEpoch:  0,
+		thisEpoch:  epoch,
+		nextEpoch:  0,
+		rawStorage: rs,
+	}
+	err = s.addNode(newNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check everything
+	addedNode, err := s.database.GetNode(epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addedNode.prevEpoch != epoch {
+		t.Fatal("addedNode.prevEpoch is invalid")
+	}
+	if addedNode.thisEpoch != epoch {
+		t.Fatal("addedNode.thisEpoch is invalid")
+	}
+	if addedNode.nextEpoch != origEpoch {
+		t.Fatal("addedNode.nextEpoch is invalid")
+	}
+	retRS, err := addedNode.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retRSBytes, err := retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsNewBytes) {
+		t.Fatal("invalid RawStorage")
+	}
+
+	origNode, err := s.database.GetNode(origEpoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if origNode.prevEpoch != epoch {
+		t.Fatal("origNode.prevEpoch is invalid")
+	}
+	if origNode.thisEpoch != origEpoch {
+		t.Fatal("origNode.thisEpoch is invalid")
+	}
+	if origNode.nextEpoch != origEpoch {
+		t.Fatal("origNode.nextEpoch is invalid")
+	}
+	retRS, err = origNode.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retRSBytes, err = retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsStandardBytes) {
+		t.Fatal("invalid RawStorage")
+	}
+}
+
+func TestStorageAddNodeGood3(t *testing.T) {
+	origEpoch := uint32(100)
+	s := initializeStorageCE(origEpoch)
+	rs := &RawStorage{}
+	rs.standardParameters()
+	rsStandardBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	newMaxBytes := uint32(12345)
+	rs.MaxBytes = newMaxBytes
+	rsNewBytes, err := rs.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	addedEpoch := uint32(10)
+	newNode := &Node{
+		prevEpoch:  0,
+		thisEpoch:  addedEpoch,
+		nextEpoch:  0,
+		rawStorage: rs,
+	}
+	err = s.addNode(newNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rs.standardParameters()
+	addedEpoch2 := uint32(1)
+	newNode2 := &Node{
+		prevEpoch:  0,
+		thisEpoch:  addedEpoch2,
+		nextEpoch:  0,
+		rawStorage: rs,
+	}
+	err = s.addNode(newNode2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check everything
+	origNode, err := s.database.GetNode(origEpoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if origNode.prevEpoch != addedEpoch {
+		t.Fatal("origNode.prevEpoch is invalid")
+	}
+	if origNode.thisEpoch != origEpoch {
+		t.Fatal("origNode.thisEpoch is invalid")
+	}
+	if origNode.nextEpoch != origEpoch {
+		t.Fatal("origNode.nextEpoch is invalid")
+	}
+	retRS, err := origNode.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retRSBytes, err := retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsStandardBytes) {
+		t.Fatal("invalid RawStorage")
+	}
+
+	addedNode, err := s.database.GetNode(addedEpoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addedNode.prevEpoch != addedEpoch2 {
+		t.Fatal("addedNode.prevEpoch is invalid")
+	}
+	if addedNode.thisEpoch != addedEpoch {
+		t.Fatal("addedNode.thisEpoch is invalid")
+	}
+	if addedNode.nextEpoch != origEpoch {
+		t.Fatal("addedNode.nextEpoch is invalid")
+	}
+	retRS, err = addedNode.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retRSBytes, err = retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsNewBytes) {
+		t.Fatal("invalid RawStorage")
+	}
+
+	addedNode2, err := s.database.GetNode(addedEpoch2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addedNode2.prevEpoch != addedEpoch2 {
+		t.Fatal("addedNode2.prevEpoch is invalid")
+	}
+	if addedNode2.thisEpoch != addedEpoch2 {
+		t.Fatal("addedNode2.thisEpoch is invalid")
+	}
+	if addedNode2.nextEpoch != addedEpoch {
+		t.Fatal("addedNode2.nextEpoch is invalid")
+	}
+	retRS, err = addedNode2.rawStorage.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retRSBytes, err = retRS.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(retRSBytes, rsStandardBytes) {
+		t.Fatal("invalid RawStorage")
+	}
+}
+
+func TestStorageAddNodeBad1(t *testing.T) {
+	s := initializeStorage()
+	rs := &RawStorage{}
+	newNode := &Node{
+		prevEpoch:  0,
+		thisEpoch:  0,
+		nextEpoch:  0,
+		rawStorage: rs,
+	}
+	err := s.addNode(newNode)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
+}
+
+func TestStorageAddNodeBad2(t *testing.T) {
+	s := initializeStorage()
+	rs := &RawStorage{}
+	newNode := &Node{
+		prevEpoch:  0,
+		thisEpoch:  1,
+		nextEpoch:  0,
+		rawStorage: rs,
+	}
+	err := s.addNode(newNode)
+	if err == nil {
+		t.Fatal("Should have raised error")
+	}
+}
+
+/*
 // Test failure of UpdateStorageInstance
 func TestStorageLoadStorage3(t *testing.T) {
 	s := initializeStorage()
@@ -452,7 +749,9 @@ func TestStorageLoadStorage3(t *testing.T) {
 		t.Fatal("Should have raised error")
 	}
 }
+*/
 
+/*
 // Test failure of UpdateStorage
 func TestStorageUpdateStorageBad(t *testing.T) {
 	s := initializeStorage()
@@ -464,7 +763,9 @@ func TestStorageUpdateStorageBad(t *testing.T) {
 		t.Fatal("Should have raised error")
 	}
 }
+*/
 
+/*
 // Test success of UpdateStorage;
 func TestStorageUpdateStorageValueGood(t *testing.T) {
 	currentEpoch := uint32(1)
@@ -529,7 +830,9 @@ func TestStorageUpdateStorageValueGood(t *testing.T) {
 		}
 	}
 }
+*/
 
+/*
 // Test failure of UpdateStorageValue
 func TestStorageUpdateStorageValueBad1(t *testing.T) {
 	s := initializeStorage()
@@ -541,7 +844,9 @@ func TestStorageUpdateStorageValueBad1(t *testing.T) {
 		t.Fatal("Should have raised error")
 	}
 }
+*/
 
+/*
 // Test failure of UpdateStorageValue
 func TestStorageUpdateStorageValueBad2(t *testing.T) {
 	s := initializeStorage()
@@ -562,7 +867,9 @@ func TestStorageUpdateStorageValueBad2(t *testing.T) {
 		t.Fatal("Should have raised error")
 	}
 }
+*/
 
+/*
 // Test failure of UpdateStorageValue
 func TestStorageUpdateStorageValueBad3(t *testing.T) {
 	s := initializeStorage()
@@ -583,7 +890,9 @@ func TestStorageUpdateStorageValueBad3(t *testing.T) {
 		t.Fatal("Should have raised error")
 	}
 }
+*/
 
+/*
 // Test success of UpdateStorageValue;
 // Here, we have currentEpoch < epoch < highestEpoch.
 func TestStorageUpdateStorageValueGood1(t *testing.T) {
@@ -649,7 +958,9 @@ func TestStorageUpdateStorageValueGood1(t *testing.T) {
 		}
 	}
 }
+*/
 
+/*
 // Test success of UpdateStorageValue;
 // Here, we have currentEpoch < highestEpoch < epoch.
 func TestStorageUpdateStorageValueGood2(t *testing.T) {
@@ -719,7 +1030,9 @@ func TestStorageUpdateStorageValueGood2(t *testing.T) {
 		t.Fatal("Should have raised ErrKeyNotPresent error")
 	}
 }
+*/
 
+/*
 // Test success of UpdateStorageValue;
 // Here, we have epoch < currentEpoch < highestEpoch.
 func TestStorageUpdateStorageValueGood3(t *testing.T) {
@@ -783,7 +1096,9 @@ func TestStorageUpdateStorageValueGood3(t *testing.T) {
 		t.Fatal("RawStorage values do not match (3)")
 	}
 }
+*/
 
+/*
 func TestStorageGetSetCurrentEpoch(t *testing.T) {
 	currentEpoch := uint32(1)
 	highestEpoch := uint32(10)
@@ -817,3 +1132,4 @@ func TestStorageGetSetCurrentEpoch(t *testing.T) {
 		t.Fatal("currentEpochs are not equal (2)")
 	}
 }
+*/

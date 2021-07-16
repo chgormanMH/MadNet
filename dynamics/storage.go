@@ -52,16 +52,11 @@ type Storage struct {
 }
 
 // checkUpdate confirms the specified update is valid.
-// TODO: we should think about ensuring that updates occur within some finite
-//		 number of epochs (say 1000 epochs from currentEpoch) to protect
-//		 against malicious actors. It is not clear how exactly to do this.
-//		 It is also not clear what to do if system goes offline and then
-//		 needs to recover. If we missed updates, what should we do about that?
 func checkUpdate(field, value string, epoch uint32) error {
-	rs := &RawStorage{}
 	if epoch == 0 {
 		return ErrInvalidUpdateValue
 	}
+	rs := &RawStorage{}
 	err := rs.UpdateValue(field, value)
 	if err != nil {
 		return err
@@ -84,31 +79,44 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 	// initialize logger
 	s.logger = logger
 
-	s.rawStorage = &RawStorage{}
-	// Get currentEpoch and associated rawStorage values
-	currentEpoch, err := s.database.GetCurrentEpoch()
+	// Get LinkedList
+	var currentEpoch uint32
+	linkedList, err := s.database.GetLinkedList()
 	if err != nil {
 		if !errors.Is(err, ErrKeyNotPresent) {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
-		// currentEpoch is not set;
-		// we load standard parameters
+		// We assume we are at the beginning
+		// We need to set currentEpoch,
+		// begin a new LinkedList and Node,
+		// and store this information
 		currentEpoch = 1
-		err = s.database.SetCurrentEpoch(currentEpoch)
+		rs := &RawStorage{}
+		rs.standardParameters()
+		node, linkedList, err := CreateLinkedList(currentEpoch, rs)
+		if err != nil {
+			return err
+		}
+		err = s.database.SetLinkedList(linkedList)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
-		s.rawStorage.standardParameters()
-		err = s.database.SetRawStorage(currentEpoch, s.rawStorage)
+		err = s.database.SetNode(node)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		s.rawStorage, err = node.rawStorage.Copy()
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	} else {
 		// No error
-		rs, err := s.database.GetRawStorage(currentEpoch)
+		currentEpoch = linkedList.GetCurrentEpoch()
+		rs, err := s.loadStorage(currentEpoch)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
@@ -119,31 +127,6 @@ func (s *Storage) Init(database *Database, logger *logrus.Logger) error {
 			return err
 		}
 	}
-
-	// Look for highestEpoch and set its value if necessary
-	highestEpoch, err := s.database.GetHighestEpoch()
-	if err != nil {
-		if !errors.Is(err, ErrKeyNotPresent) {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
-		highestEpoch = currentEpoch
-		err = s.database.SetHighestEpoch(highestEpoch)
-		if err != nil {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
-	}
-	// Ensure highestEpoch >= currentEpoch
-	if highestEpoch < currentEpoch {
-		highestEpoch = currentEpoch
-		err = s.database.SetHighestEpoch(highestEpoch)
-		if err != nil {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -155,6 +138,7 @@ func (s *Storage) Start() {
 	})
 }
 
+/*
 // UpdateStorage updates the database to include changes that must be made
 // to the database
 func (s *Storage) UpdateStorage(field, value string, epoch uint32) error {
@@ -175,7 +159,9 @@ func (s *Storage) UpdateStorage(field, value string, epoch uint32) error {
 	}
 	return nil
 }
+*/
 
+/*
 // updateStorageValue updates the stored RawStorage values.
 //
 // There are a few cases that must be handled.
@@ -282,6 +268,7 @@ func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 				utils.DebugTrace(s.logger, err)
 				return err
 			}
+			// DO NOT ACT ON LOCAL VERSION!
 			if epochIter == currentEpoch {
 				s.rawStorage, err = rsCurr.Copy()
 				if err != nil {
@@ -306,46 +293,170 @@ func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 	}
 	return nil
 }
+*/
 
-// LoadStorage updates RawStorage to the correct value
-// defined by the epoch. It does this by searching for RawStorage at epoch.
-// If it does not exist, then it uses the current RawStorage value and stores
-// it in that location.
+// LoadStorage updates RawStorage to the correct value defined by the epoch.
 func (s *Storage) LoadStorage(epoch uint32) error {
+	select {
+	case <-s.startChan:
+	}
+	s.RLock()
+	defer s.RUnlock()
+	rs, err := s.loadStorage(epoch)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	s.rawStorage, err = rs.Copy()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+	return nil
+}
+
+// loadStorage looks for the appropriate RawStorage value in the database
+// and returns that value.
+//
+// We start at the most updated epoch and proceed backwards until we arrive
+// at the node with
+//		epoch >= node.thisEpoch
+func (s *Storage) loadStorage(epoch uint32) (*RawStorage, error) {
+	ll, err := s.database.GetLinkedList()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return nil, err
+	}
+	elu := ll.GetEpochLastUpdated()
+	currentNode, err := s.database.GetNode(elu)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return nil, err
+	}
+
+	// Loop backwards through the LinkedList
+	for {
+		if epoch >= currentNode.thisEpoch {
+			rs, err := currentNode.rawStorage.Copy()
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return nil, err
+			}
+			return rs, nil
+		}
+		// If we have reached the tail node, then we do not have a node
+		// for this specific epoch; we raise an error.
+		if currentNode.IsTail() {
+			utils.DebugTrace(s.logger, err)
+			return nil, ErrInvalid
+		}
+		// We proceed backward in the linked list of nodes
+		prevEpoch := currentNode.prevEpoch
+		currentNode, err = s.database.GetNode(prevEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return nil, err
+		}
+	}
+}
+
+// addNode adds an additional node to the databae.
+// This node can be added anywhere.
+// If the node is added at the head, then LinkedList must be updated
+// to reflect this change.
+func (s *Storage) addNode(node *Node) error {
 	select {
 	case <-s.startChan:
 	}
 	s.Lock()
 	defer s.Unlock()
 
-	// Search for RawStorage for epoch at correct location
-	rs, err := s.database.GetRawStorage(epoch)
-	if err != nil {
-		if !errors.Is(err, ErrKeyNotPresent) {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
-		// There is no current rawStorage for the specified epoch;
-		// continue to use current rawStorage
-		err = s.database.SetRawStorage(epoch, s.rawStorage)
-		if err != nil {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
-	} else {
-		s.rawStorage, err = rs.Copy()
-		if err != nil {
-			utils.DebugTrace(s.logger, err)
-			return err
-		}
+	// Ensure node.rawStorage and node.thisEpoch are valid;
+	// other parameters should not be set
+	if !node.IsPreValid() {
+		return ErrInvalid
 	}
-	// We now update currentEpoch to reflect these changes
-	err = s.database.SetCurrentEpoch(epoch)
+
+	ll, err := s.database.GetLinkedList()
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
 		return err
 	}
-	return nil
+	elu := ll.GetEpochLastUpdated()
+	currentNode, err := s.database.GetNode(elu)
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+
+	// Loop backwards through the LinkedList
+	for {
+		if node.thisEpoch > currentNode.thisEpoch {
+			// We check if currentNode is at head; if yes, then we need to update
+			// This must happen before SetEpochs because SetEpochs modifies nodes!
+			makeNewHead := currentNode.IsHead()
+			// We need to add node after currentNode
+			err = node.SetEpochs(currentNode, nil)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			// Store the nodes after changes have been made
+			err = s.database.SetNode(currentNode)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			err = s.database.SetNode(node)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			if makeNewHead {
+				// We need to update EpochLastUpdated
+				err = ll.SetEpochLastUpdated(node.thisEpoch)
+				if err != nil {
+					utils.DebugTrace(s.logger, err)
+					return err
+				}
+				err = s.database.SetLinkedList(ll)
+				if err != nil {
+					utils.DebugTrace(s.logger, err)
+					return err
+				}
+			}
+			return nil
+		}
+		if node.thisEpoch == currentNode.thisEpoch {
+			// Node is already present; raise error
+			return ErrInvalid
+		}
+		if currentNode.IsTail() {
+			// We need to add node before currentNode
+			err = node.SetEpochs(nil, currentNode)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			err = s.database.SetNode(currentNode)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			err = s.database.SetNode(node)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			return nil
+		}
+		prevEpoch := currentNode.prevEpoch
+		currentNode, err = s.database.GetNode(prevEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+	}
 }
 
 /*
@@ -395,7 +506,19 @@ func (s *Storage) SetCurrentEpoch(epoch uint32) error {
 	}
 	s.Lock()
 	defer s.Unlock()
-	return s.database.SetCurrentEpoch(epoch)
+	ll, err := s.database.GetLinkedList()
+	if err != nil {
+		return err
+	}
+	err = ll.SetCurrentEpoch(epoch)
+	if err != nil {
+		return err
+	}
+	err = s.database.SetLinkedList(ll)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetCurrentEpoch returns the current epoch
@@ -405,7 +528,12 @@ func (s *Storage) GetCurrentEpoch() (uint32, error) {
 	}
 	s.RLock()
 	defer s.RUnlock()
-	return s.database.GetCurrentEpoch()
+	ll, err := s.database.GetLinkedList()
+	if err != nil {
+		return 0, err
+	}
+	currentEpoch := ll.GetCurrentEpoch()
+	return currentEpoch, nil
 }
 
 // GetMaxBytes returns the maximum allowed bytes

@@ -31,6 +31,21 @@ type RawStorage struct {
 	DataStoreTxValidVersion uint32 `json:"dataStoreTxValidVersion,omitempty"`
 }
 
+/*
+struct {
+	Type
+	Value
+	Name
+}
+
+type struct interface {
+	GetName() string
+	GetType() enum
+	GetValue() interface{}/string (parse using type for enum)
+}
+
+*/
+
 // Marshal performs json.Marshal on the RawStorage struct.
 func (rs *RawStorage) Marshal() ([]byte, error) {
 	if rs == nil {
@@ -63,6 +78,20 @@ func (rs *RawStorage) Copy() (*RawStorage, error) {
 	}
 	return c, nil
 }
+
+// IsValid returns true if we can successfully make a copy
+func (rs *RawStorage) IsValid() bool {
+	_, err := rs.Copy()
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+// ParseInt64/Uint32/BigInt; fix this
+// *DRY*
+//
+// Do enum for field (look at iota/opcode )
 
 // UpdateValue updates the field with the appropriate value.
 func (rs *RawStorage) UpdateValue(field, value string) error {
