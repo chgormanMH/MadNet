@@ -88,276 +88,65 @@ func initializeDB() *Database {
 	return db
 }
 
-/*
-func TestMakeRawStorageKey(t *testing.T) {
+func TestGetSetNode(t *testing.T) {
 	db := initializeDB()
-	epoch := uint32(0)
-	_, err := db.makeRawStorageKey(epoch)
+
+	node := &Node{}
+	err := db.SetNode(node)
 	if err == nil {
 		t.Fatal("Should have raised error")
 	}
 
-	epoch = 1
-	key, err := db.makeRawStorageKey(epoch)
+	node.prevEpoch = 1
+	node.thisEpoch = 1
+	node.nextEpoch = 1
+	node.rawStorage = &RawStorage{}
+	err = db.SetNode(node)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefix := dbprefix.PrefixRawStorageKey()
-	epochBytes := utils.MarshalUint32(epoch)
-	keyTrue := []byte{}
-	keyTrue = append(keyTrue, prefix...)
-	keyTrue = append(keyTrue, epochBytes...)
-	if !bytes.Equal(key, keyTrue) {
-		t.Fatal("Incorrect RawStorageKey (1)")
+	nodeBytes, err := node.Marshal()
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	epoch = 4294967295
-	key, err = db.makeRawStorageKey(epoch)
+	node2, err := db.GetNode(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefix = dbprefix.PrefixRawStorageKey()
-	epochBytes = utils.MarshalUint32(epoch)
-	keyTrue = []byte{}
-	keyTrue = append(keyTrue, prefix...)
-	keyTrue = append(keyTrue, epochBytes...)
-	if !bytes.Equal(key, keyTrue) {
-		t.Fatal("Incorrect RawStorageKey (2)")
+	node2Bytes, err := node2.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(nodeBytes, node2Bytes) {
+		t.Fatal("nodes do not match")
 	}
 }
 
-func TestGetSetRawStorage(t *testing.T) {
+func TestGetSetLinkedList(t *testing.T) {
 	db := initializeDB()
-	epoch := uint32(0)
-	rs := &RawStorage{}
-	err := db.SetRawStorage(epoch, rs)
+
+	ll := &LinkedList{}
+	err := db.SetLinkedList(ll)
 	if err == nil {
 		t.Fatal("Should have raised error (1)")
 	}
 
-	_, err = db.GetRawStorage(epoch)
-	if err == nil {
-		t.Fatal("Should have raised error (2)")
+	ll.epochLastUpdated = 1
+	ll.currentEpoch = 1
+	err = db.SetLinkedList(ll)
+	if err != nil {
+		t.Fatal(err)
 	}
+	llBytes := ll.Marshal()
 
-	epoch = uint32(1)
-	_, err = db.GetRawStorage(epoch)
-	if err == nil {
-		t.Fatal("Should have raised error (3)")
-	}
-
-	rs.standardParameters()
-	err = db.SetRawStorage(epoch, rs)
+	ll2, err := db.GetLinkedList()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	rsRcvd, err := db.GetRawStorage(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rsBytes, err := rs.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rsRcvdBytes, err := rsRcvd.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(rsBytes, rsRcvdBytes) {
-		t.Fatal("rawStorage are not equal")
-	}
-
-	err = db.SetRawStorage(epoch, nil)
-	if err == nil {
-		t.Fatal("Should have raised error (1)")
-	}
-
-	// Set invalid value and attempt retreive it;
-	// this should raise an error.
-	invalidBytes := []byte("Invalid bytes")
-	rsEpochKey, err := db.makeRawStorageKey(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = db.rawDB.SetValue(rsEpochKey, invalidBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = db.GetRawStorage(epoch)
-	if err == nil {
-		t.Fatal("Should have raised error (2)")
+	ll2Bytes := ll2.Marshal()
+	if !bytes.Equal(llBytes, ll2Bytes) {
+		t.Fatal("LinkedLists do not match")
 	}
 }
-*/
-
-/*
-func TestMakeCurrentEpochKey(t *testing.T) {
-	db := initializeDB()
-	key := db.makeCurrentEpochKey()
-	prefix := dbprefix.PrefixRawStorageKey()
-	currentEpoch := constants.StorageCurrentEpoch()
-	keyTrue := []byte{}
-	keyTrue = append(keyTrue, prefix...)
-	keyTrue = append(keyTrue, currentEpoch...)
-	if !bytes.Equal(key, keyTrue) {
-		t.Fatal("Incorrect CurrentEpochKey")
-	}
-}
-
-func TestGetSetCurrentEpoch(t *testing.T) {
-	db := initializeDB()
-	_, err := db.GetCurrentEpoch()
-	if err == nil {
-		t.Fatal("Should have raised error (1)")
-	}
-
-	epoch := uint32(0)
-	err = db.SetCurrentEpoch(epoch)
-	if err == nil {
-		t.Fatal("Should have raised error (2)")
-	}
-
-	// Set currentEpoch in database and then check
-	epoch = 1
-	err = db.SetCurrentEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	curEpoch, err := db.GetCurrentEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if curEpoch != epoch {
-		t.Fatal("currentEpochs are not equal (1)")
-	}
-
-	// Set currentEpoch in database and then check (again)
-	epoch = 25519
-	err = db.SetCurrentEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	curEpoch, err = db.GetCurrentEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if curEpoch != epoch {
-		t.Fatal("currentEpochs are not equal (2)")
-	}
-
-	// Set currentEpoch in database and then check (another time)
-	epoch = 4294967295
-	err = db.SetCurrentEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	curEpoch, err = db.GetCurrentEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if curEpoch != epoch {
-		t.Fatal("currentEpochs are not equal (3)")
-	}
-
-	// Set invalid data at current epoch location;
-	// attempting to retrieve should raise an error
-	ceKey := db.makeCurrentEpochKey()
-	invalidBytes := []byte("Invalid Bytes")
-	err = db.rawDB.SetValue(ceKey, invalidBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = db.GetCurrentEpoch()
-	if err == nil {
-		t.Fatal("Should have raised error (3)")
-	}
-}
-*/
-
-/*
-func TestMakeHighestEpochKey(t *testing.T) {
-	db := initializeDB()
-	key := db.makeHighestEpochKey()
-	prefix := dbprefix.PrefixRawStorageKey()
-	highestEpoch := constants.StorageHighestEpoch()
-	keyTrue := []byte{}
-	keyTrue = append(keyTrue, prefix...)
-	keyTrue = append(keyTrue, highestEpoch...)
-
-	if !bytes.Equal(key, keyTrue) {
-		t.Fatal("Incorrect HighestEpochKey")
-	}
-}
-*/
-
-/*
-func TestGetSetHighestEpoch(t *testing.T) {
-	db := initializeDB()
-	epoch := uint32(0)
-	err := db.SetHighestEpoch(epoch)
-	if err == nil {
-		t.Fatal("Should have raised error (1)")
-	}
-
-	_, err = db.GetHighestEpoch()
-	if err == nil {
-		t.Fatal("Should have raised error (2)")
-	}
-
-	// Set highestEpoch in database and check
-	epoch = 1
-	err = db.SetHighestEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	highestEpoch, err := db.GetHighestEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if highestEpoch != epoch {
-		t.Fatal("highestEpochs are not equal (1)")
-	}
-
-	// Set highestEpoch in database and check (again)
-	epoch = 25519
-	err = db.SetHighestEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	highestEpoch, err = db.GetHighestEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if highestEpoch != epoch {
-		t.Fatal("highestEpochs are not equal (2)")
-	}
-
-	// Set highestEpoch in database and check (again)
-	epoch = 4294967295
-	err = db.SetHighestEpoch(epoch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	highestEpoch, err = db.GetHighestEpoch()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if highestEpoch != epoch {
-		t.Fatal("highestEpochs are not equal (3)")
-	}
-
-	// Set invalid data at highest epoch location;
-	// attempting to retrieve should raise an error
-	heKey := db.makeHighestEpochKey()
-	invalidBytes := []byte("Invalid Bytes")
-	err = db.rawDB.SetValue(heKey, invalidBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = db.GetHighestEpoch()
-	if err == nil {
-		t.Fatal("Should have raised error (3)")
-	}
-}
-*/

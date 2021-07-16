@@ -50,14 +50,11 @@ func (ll *LinkedList) SetCurrentEpoch(epoch uint32) error {
 }
 
 // Marshal marshals LinkedList
-func (ll *LinkedList) Marshal() ([]byte, error) {
-	if !ll.IsValid() {
-		return nil, ErrInvalid
-	}
+func (ll *LinkedList) Marshal() []byte {
 	eluBytes := utils.MarshalUint32(ll.epochLastUpdated)
 	ceBytes := utils.MarshalUint32(ll.currentEpoch)
 	v := append(eluBytes, ceBytes...)
-	return v, nil
+	return v
 }
 
 // Unmarshal unmarshals LinkedList
@@ -69,9 +66,6 @@ func (ll *LinkedList) Unmarshal(v []byte) error {
 	ce, _ := utils.UnmarshalUint32(v[4:8])
 	ll.epochLastUpdated = elu
 	ll.currentEpoch = ce
-	if !ll.IsValid() {
-		return ErrInvalid
-	}
 	return nil
 }
 

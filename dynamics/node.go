@@ -14,9 +14,6 @@ type Node struct {
 
 // Marshal marshals a Node
 func (n *Node) Marshal() ([]byte, error) {
-	if !n.IsValid() {
-		return nil, ErrInvalidNode
-	}
 	rsBytes, err := n.rawStorage.Marshal()
 	if err != nil {
 		return nil, err
@@ -47,9 +44,6 @@ func (n *Node) Unmarshal(v []byte) error {
 	err := n.rawStorage.Unmarshal(v[12:])
 	if err != nil {
 		return err
-	}
-	if !n.IsValid() {
-		return ErrInvalidNode
 	}
 	return nil
 }
@@ -92,10 +86,8 @@ func (n *Node) IsPreValid() bool {
 	return true
 }
 
+// Copy makes a copy of Node
 func (n *Node) Copy() (*Node, error) {
-	if !n.IsValid() {
-		return nil, ErrInvalidNode
-	}
 	nodeBytes, err := n.Marshal()
 	if err != nil {
 		return nil, err

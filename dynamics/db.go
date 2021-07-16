@@ -13,6 +13,7 @@ type Database struct {
 	logger *logrus.Logger
 }
 
+// SetNode stores Node in the database
 func (db *Database) SetNode(node *Node) error {
 	if !node.IsValid() {
 		return ErrInvalidNode
@@ -36,6 +37,7 @@ func (db *Database) SetNode(node *Node) error {
 	return nil
 }
 
+// GetNode retrieves Node from the database
 func (db *Database) GetNode(epoch uint32) (*Node, error) {
 	nodeKey, err := makeNodeKey(epoch)
 	if err != nil {
@@ -66,10 +68,10 @@ func (db *Database) GetNode(epoch uint32) (*Node, error) {
 
 // SetLinkedList saves LinkedList to the database
 func (db *Database) SetLinkedList(ll *LinkedList) error {
-	value, err := ll.Marshal()
-	if err != nil {
-		return err
+	if !ll.IsValid() {
+		return ErrInvalid
 	}
+	value := ll.Marshal()
 	llKey := makeLinkedListKey()
 	key, err := llKey.Marshal()
 	if err != nil {

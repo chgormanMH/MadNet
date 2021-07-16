@@ -62,11 +62,42 @@ func TestNodeMarshal(t *testing.T) {
 		t.Fatal("Should have raised error (3)")
 	}
 
-	v = make([]byte, 12)
-	v = append(v, rsBytes...)
-	err = node.Unmarshal(v)
+	/*
+		v = make([]byte, 12)
+		v = append(v, rsBytes...)
+		err = node.Unmarshal(v)
+		if err == nil {
+			t.Fatal("Should have raised error (4)")
+		}
+	*/
+}
+
+func TestNodeCopy(t *testing.T) {
+	n := &Node{}
+	_, err := n.Copy()
 	if err == nil {
-		t.Fatal("Should have raised error (4)")
+		t.Fatal("Should have raised error (1)")
+	}
+
+	n.prevEpoch = 1
+	n.thisEpoch = 1
+	n.nextEpoch = 1
+	n.rawStorage = &RawStorage{}
+	n2, err := n.Copy()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nBytes, err := n.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	n2Bytes, err := n2.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(nBytes, n2Bytes) {
+		t.Fatal("nodes do not match")
 	}
 }
 

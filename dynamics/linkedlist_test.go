@@ -23,20 +23,19 @@ func TestLinkedListMarshal(t *testing.T) {
 	if ll.IsValid() {
 		t.Fatal("Should not have valid LinkedList")
 	}
-	_, err := ll.Marshal()
-	if err == nil {
-		t.Fatal("Should have raised error (1)")
-	}
 
 	invalidBytes := []byte{0, 1, 2, 3, 4}
-	err = ll.Unmarshal(invalidBytes)
+	err := ll.Unmarshal(invalidBytes)
 	if err == nil {
 		t.Fatal("Should have raised error (2)")
 	}
 
 	invalidBytes2 := make([]byte, 8)
 	err = ll.Unmarshal(invalidBytes2)
-	if err == nil {
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ll.epochLastUpdated != 0 || ll.currentEpoch != 0 {
 		t.Fatal("Should have raised error (3)")
 	}
 
