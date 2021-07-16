@@ -154,7 +154,6 @@ func (s *Storage) Start() {
 	})
 }
 
-/*
 // UpdateStorage updates the database to include changes that must be made
 // to the database
 func (s *Storage) UpdateStorage(field, value string, epoch uint32) error {
@@ -178,136 +177,218 @@ func (s *Storage) UpdateStorage(field, value string, epoch uint32) error {
 
 // updateStorageValue updates the stored RawStorage values.
 //
-// There are a few cases that must be handled.
-// Throughout, we let E == epoch (from the function argument),
-// C == currentEpoch, and H == highestEpoch.
-// We have three possibilities:
-//
-//          E           C                               H
-//		|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-//
-//                      C               E               H
-//		|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-//
-//                      C                               H           E
-//		|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-//
-// Naturally, we also allow for E == C or E == H (and even C == H).
-//
-// When E <= H, then we need to update epochs starting with max(C, E).
-// In this case, we stop updating epochs at H.
-// Thus, we have minEpoch = max(C, E) and maxEpoch = H.
-// To update, we load RawStorage, update the value, and write RawStorage.
-// This begins at minEpoch and ends at maxEpoch.
-//
-// Otherwise, we have E > H. In this case, we set minEpoch = H+1
-// and maxEpoch = E. When updating epochs, no value will have been set,
-// so we load RawStorage from the previous epoch and save it
-// to the current value. When we reach maxEpoch (== epoch), we load
-// the previous epoch, update the value, and then write it.
+// We start at the Head of LinkedList and find the farthest point
+// at which we need to update nodes.
+// Once we find the beginning, we iterate forward and update all forward nodes.
 func (s *Storage) updateStorageValue(field, value string, epoch uint32) error {
 	select {
 	case <-s.startChan:
 	}
-
-	// We now set the lowest epoch which we must change
-	var minEpoch uint32
-	var maxEpoch uint32
-	currentEpoch, err := s.database.GetCurrentEpoch()
+	ll, err := s.database.GetLinkedList()
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
 		return err
 	}
-	highestEpoch, err := s.database.GetHighestEpoch()
+	elu := ll.GetEpochLastUpdated()
+	iterNode, err := s.database.GetNode(elu)
 	if err != nil {
 		utils.DebugTrace(s.logger, err)
 		return err
 	}
-	updateHighestEpoch := false
-	if epoch <= highestEpoch {
-		// minEpoch == max(epoch, currentEpoch)
-		minEpoch = epoch
-		if currentEpoch > epoch {
-			minEpoch = currentEpoch
-		}
-		maxEpoch = highestEpoch
-	} else {
-		// The epoch we need to update is beyond what we stored.
-		// We now need to update highestEpoch to reflect this change.
-		updateHighestEpoch = true
-		minEpoch = highestEpoch + 1
-		maxEpoch = epoch
-	}
 
-	for epochIter := minEpoch; epochIter <= maxEpoch; epochIter++ {
-		rsCurr := &RawStorage{}
-		updateValue := true
+	// firstNode denotes where we will begin looping forward
+	// including the updated value;
+	// this will not be used when we have a new Head
+	firstNode := &Node{}
+	// duplicateNode is used when we will copy values from the previous node
+	// and then updating it to form a new node
+	duplicateNode := &Node{}
+	// newHead denotes if we need to update the Head of the LinkedList;
+	// that is, if we need to update EpochLastUpdated
+	newHead := false
+	// newTail denotes if we have a new Tail of the LinkedList;
+	// that is, if we have a new update farthest in the past
+	newTail := false
+	// addNode denotes whether we must add a node.
+	// This will not occur if our update is on another node,
+	// which could happen if multiple updates occur on one epoch.
+	addNode := true
 
-		if epochIter > epoch {
-			// We load RawStorage, update value, and write RawStorage
-			rsCurr, err = s.database.GetRawStorage(epochIter)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-		} else if epochIter < epoch {
-			// Load RawStorage from previous epoch and write RawStorage
-			// to current epoch
-			rsCurr, err = s.database.GetRawStorage(epochIter - 1)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-			updateValue = false
-
-		} else if updateHighestEpoch {
-			// epochIter == epoch and epoch > highestEpoch
-			rsCurr, err = s.database.GetRawStorage(epochIter - 1)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-		} else {
-			// epochIter == epoch and epoch <= highestEpoch
-			rsCurr, err = s.database.GetRawStorage(epochIter)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-		}
-
-		if updateValue {
-			err = rsCurr.UpdateValue(field, value)
-			if err != nil {
-				utils.DebugTrace(s.logger, err)
-				return err
-			}
-			// DO NOT ACT ON LOCAL VERSION!
-			if epochIter == currentEpoch {
-				s.rawStorage, err = rsCurr.Copy()
+	// Loop backwards through the LinkedList to find firstNode and duplicateNode
+	for {
+		if epoch >= iterNode.thisEpoch {
+			// We will use
+			//
+			// I = iterNode
+			// U = updateNode
+			// F = firstNode
+			// D = duplicateNode
+			// H = Head
+			//
+			// in our diagrams below.
+			//
+			// the update occurs in the current range
+			if epoch == iterNode.thisEpoch {
+				// the update occurs on a node; we do not need to add a node
+				//
+				//                         U
+				//	                       F
+				//	                       I
+				// |---|---|---|---|---|---|---|---|---|---|---|---|
+				firstNode, err = iterNode.Copy()
+				if err != nil {
+					utils.DebugTrace(s.logger, err)
+					return err
+				}
+				addNode = false
+			} else {
+				// epoch > iterNode.thisEpoch
+				if iterNode.IsHead() {
+					// we will add a new node further in the future;
+					// there will be no iteration.
+					//
+					//	       H
+					//	       D
+					//	       I               U
+					// |---|---|---|---|---|---|---|---|---|---|---|---|
+					newHead = true
+				} else {
+					// we start iterating at the node ahead.
+					//
+					//	       D
+					//	       I               U               F
+					// |---|---|---|---|---|---|---|---|---|---|---|---|
+					firstNode, err = s.database.GetNode(iterNode.nextEpoch)
+					if err != nil {
+						utils.DebugTrace(s.logger, err)
+						return err
+					}
+				}
+				duplicateNode, err = iterNode.Copy()
 				if err != nil {
 					utils.DebugTrace(s.logger, err)
 					return err
 				}
 			}
+			break
 		}
-		err = s.database.SetRawStorage(epochIter, rsCurr)
+		// If we have reached the tail node, then we do not have a node
+		// for this specific epoch; we raise an error.
+		if iterNode.IsTail() {
+			// we start iterating at the node ahead.
+			//
+			// T = Tail
+			//
+			//	                       F
+			//	                       T
+			//	       U               I
+			// |---|---|---|---|---|---|---|---|---|---|---|---|
+			firstNode, err = iterNode.Copy()
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			newTail = true
+			break
+		}
+		// We proceed backward in the linked list of nodes
+		prevEpoch := iterNode.prevEpoch
+		iterNode, err = s.database.GetNode(prevEpoch)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	}
 
-	if updateHighestEpoch {
-		err = s.database.SetHighestEpoch(epoch)
+	if addNode {
+		// We need to add a new node, so we prepare
+		node := &Node{
+			thisEpoch: epoch,
+		}
+		// We compute the correct RawStorage value
+		rs := &RawStorage{}
+		if newTail {
+			// We need to add a new tail.
+			// Now, this should NEVER happen in practice, but we include it
+			// to take care of all possibilities and to not allow
+			// an infinite loop.
+			rs.standardParameters()
+			// We use the standard parameter and then update them.
+			err = rs.UpdateValue(field, value)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+		} else {
+			// We grab the RawStorage from duplicateNode and then update the value.
+			rs, err = duplicateNode.rawStorage.Copy()
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+			err = rs.UpdateValue(field, value)
+			if err != nil {
+				utils.DebugTrace(s.logger, err)
+				return err
+			}
+		}
+		node.rawStorage = rs
+		// We add the node to the database
+		err = s.addNode(node)
 		if err != nil {
 			utils.DebugTrace(s.logger, err)
 			return err
 		}
 	}
+
+	if newHead {
+		// We added a new Head, so we need to store this information
+		// before we exit.
+		err = ll.SetEpochLastUpdated(epoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		err = s.database.SetLinkedList(ll)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		return nil
+	}
+
+	// We now iterate forward from firstNode and update all the nodes
+	// to reflect the new values.
+	iterNode, err = firstNode.Copy()
+	if err != nil {
+		utils.DebugTrace(s.logger, err)
+		return err
+	}
+
+	for {
+		err = iterNode.rawStorage.UpdateValue(field, value)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		err = s.database.SetNode(iterNode)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+		if iterNode.IsHead() {
+			break
+		}
+		nextEpoch := iterNode.nextEpoch
+		iterNode, err = s.database.GetNode(nextEpoch)
+		if err != nil {
+			utils.DebugTrace(s.logger, err)
+			return err
+		}
+	}
+
 	return nil
 }
-*/
 
 // LoadStorage updates RawStorage to the correct value defined by the epoch.
 func (s *Storage) LoadStorage(epoch uint32) error {
